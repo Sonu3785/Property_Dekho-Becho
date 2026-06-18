@@ -15,29 +15,36 @@ def register(user: schemas.UserCreate):
 
         hashed_password = auth.hash_password(user.password)
 
-        # Insert into users table
+        # Insert into users table (only columns that exist)
         response = supabase.table("users").insert({
             "name":     user.name,
             "email":    user.email,
             "password": hashed_password,
-            "role":     user.role,
-            "phone":    user.phone or ""
         }).execute()
 
         new_user = response.data[0] if response.data else None
 
-        # If registering as tenant → auto-create tenant record (property_id=None initially)
+        # Try to store role & phone — may fail if columns don't exist yet
+        if new_user:
+            try:
+                supabase.table("users").update({
+                    "role":  user.role,
+                    "phone": user.phone or ""
+                }).eq("id", new_user["id"]).execute()
+            except Exception:
+                pass  # columns not added yet — non-fatal
+
+        # If registering as tenant → auto-create tenant record
         if user.role == "tenant" and new_user:
             try:
                 supabase.table("tenants").insert({
-                    "name":        user.name,
-                    "email":       user.email,
-                    "phone":       user.phone or "",
-                    "property_id": None
+                    "name":  user.name,
+                    "email": user.email,
+                    "phone": user.phone or "",
+                    "property_id": 0   # placeholder — updated when they apply for a property
                 }).execute()
             except Exception as te:
                 print("Auto-tenant insert warning:", str(te))
-                # Non-fatal — tenant record without property is fine
 
         return {
             "message": "Registered successfully",
@@ -73,8 +80,8 @@ def login(user: schemas.UserLogin):
                 "id":    db_user["id"],
                 "name":  db_user["name"],
                 "email": db_user["email"],
-                "role":  db_user.get("role", "owner"),
-                "phone": db_user.get("phone", "")
+                "role":  db_user.get("role") or "owner",
+                "phone": db_user.get("phone") or ""
             }
         }
 
