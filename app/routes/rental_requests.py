@@ -140,9 +140,13 @@ def get_my_requests(user_id: int = Depends(auth.get_current_user_id)):
 @router.get("/incoming")
 def get_incoming_requests(owner_id: int = Depends(auth.get_current_user_id)):
     try:
+        print(f"INCOMING REQUESTS - owner_id from token: {owner_id}")
+        
         props = supabase.table("properties").select("id").eq("owner_id", owner_id).execute()
+        print(f"Properties found: {props.data}")
         prop_ids = [p["id"] for p in props.data]
         if not prop_ids:
+            print(f"No properties for owner_id={owner_id}")
             return []
 
         requests = (
@@ -151,6 +155,7 @@ def get_incoming_requests(owner_id: int = Depends(auth.get_current_user_id)):
             .in_("property_id", prop_ids)
             .execute()
         )
+        print(f"Requests found: {requests.data}")
 
         result = []
         for r in requests.data:
