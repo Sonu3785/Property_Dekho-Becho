@@ -10,6 +10,7 @@ const TABS = [
   { id: 'overview',   icon: '📊', label: 'Overview'        },
   { id: 'browse',     icon: '🏢', label: 'Browse'          },
   { id: 'cart',       icon: '🛒', label: 'My Cart'         },
+  { id: 'requests',   icon: '📬', label: 'My Requests'     },
   { id: 'agreements', icon: '📄', label: 'My Agreements'   },
   { id: 'payments',   icon: '💳', label: 'My Payments'     },
 ]
@@ -20,6 +21,7 @@ export default function TenantDashboard() {
   const [properties, setProperties] = useState([])
   const [payments, setPayments]     = useState([])
   const [agreements, setAgreements] = useState([])
+  const [myRequests, setMyRequests] = useState([])
   const [cart, setCart]             = useState([])           // [{property, startDate, endDate, phone}]
   const [loading, setLoading]       = useState(true)
 
@@ -32,14 +34,16 @@ export default function TenantDashboard() {
 
   const fetchAll = async () => {
     setLoading(true)
-    const [p, pay, ag] = await Promise.allSettled([
+    const [p, pay, ag, reqs] = await Promise.allSettled([
       API.get('/properties/all'),
       API.get('/payments/my'),
       API.get('/agreements/my'),
+      API.get('/requests/my'),
     ])
-    setProperties(p.status   === 'fulfilled' && Array.isArray(p.value.data)   ? p.value.data   : [])
-    setPayments(  pay.status === 'fulfilled' && Array.isArray(pay.value.data) ? pay.value.data : [])
-    setAgreements(ag.status  === 'fulfilled' && Array.isArray(ag.value.data)  ? ag.value.data  : [])
+    setProperties(p.status    === 'fulfilled' && Array.isArray(p.value.data)    ? p.value.data    : [])
+    setPayments(  pay.status  === 'fulfilled' && Array.isArray(pay.value.data)  ? pay.value.data  : [])
+    setAgreements(ag.status   === 'fulfilled' && Array.isArray(ag.value.data)   ? ag.value.data   : [])
+    setMyRequests(reqs.status === 'fulfilled' && Array.isArray(reqs.value.data) ? reqs.value.data : [])
     setLoading(false)
   }
 
@@ -83,10 +87,11 @@ export default function TenantDashboard() {
         {loading
           ? <div className={styles.loader}><span className={styles.spin} /></div>
           : <>
-            {activeTab === 'overview'   && <TenantOverview properties={properties} payments={payments} agreements={agreements} user={user} setActiveTab={setActiveTab} cartCount={cartCount} />}
-            {activeTab === 'browse'     && <BrowseProperties properties={properties} agreements={agreements} addToCart={addToCart} cart={cart} />}
+            {activeTab === 'overview'   && <TenantOverview properties={properties} payments={payments} agreements={agreements} myRequests={myRequests} user={user} setActiveTab={setActiveTab} cartCount={cartCount} />}
+            {activeTab === 'browse'     && <BrowseProperties properties={properties} agreements={agreements} myRequests={myRequests} addToCart={addToCart} cart={cart} />}
             {activeTab === 'cart'       && <CartPage cart={cart} removeFromCart={removeFromCart} updateCartItem={updateCartItem} saveCart={saveCart} user={user} refresh={fetchAll} setActiveTab={setActiveTab} />}
-            {activeTab === 'agreements' && <MyAgreements agreements={agreements} properties={properties} />}
+            {activeTab === 'requests'   && <MyRequests myRequests={myRequests} agreements={agreements} refresh={fetchAll} />}
+            {activeTab === 'agreements' && <MyAgreements agreements={agreements} properties={properties} refresh={fetchAll} />}
             {activeTab === 'payments'   && <MyPayments payments={payments} />}
           </>
         }
@@ -258,14 +263,20 @@ function CartPage({ cart, removeFromCart, updateCartItem, saveCart, user, refres
 
     setSubmitting(s => ({ ...s, [item.property.id]: true }))
     try {
-      await API.post('/tenants/request-rental', {
+      const res = await API.post('/requests/', {
         property_id: item.property.id,
         phone:       item.phone,
         start_date:  item.startDate,
         end_date:    item.endDate,
         message:     ''
       })
-      toast.success(`Rental request sent for "${item.property.title}"! 🎉`)
+      const ownerContact = res.data?.owner_contact
+      toast.success(`Request sent for "${item.property.title}"! 🎉`)
+      if (ownerContact?.phone) {
+        toast.success(`Owner contact: ${ownerContact.name} — 📞 ${ownerContact.phone}`, { duration: 6000 })
+      } else if (ownerContact?.email) {
+        toast.success(`Owner email: ${ownerContact.email}`, { duration: 5000 })
+      }
       removeFromCart(item.property.id)
       refresh()
     } catch (err) {
@@ -368,32 +379,103 @@ function CartPage({ cart, removeFromCart, updateCartItem, saveCart, user, refres
 }
 
 /* ── MY AGREEMENTS ────────────────────────────────────────── */
-function MyAgreements({ agreements, properties }) {
+function MyAgreements({ agreements, properties, refresh }) {
+  const [approving, setApproving] = useState({})
+
+  const handleApprove = async (agId) => {
+    setApproving(s => ({ ...s, [agId]: true }))
+    try {
+      const res = await API.post(`/requests/agreements/${agId}/tenant-approve`)
+      toast.success(res.data.message)
+      refresh()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to approve')
+    } finally {
+      setApproving(s => ({ ...s, [agId]: false }))
+    }
+  }
+
+  const statusColor = { active: '#10b981', pending_approval: '#f59e0b', rejected: '#ef4444' }
+  const statusLabel = { active: '✅ Active', pending_approval: '⏳ Pending Approval', rejected: '❌ Rejected' }
+
   return (
     <div>
       <div className={styles.pageHeader}><div><h2>My Agreements</h2><p className={styles.subtitle}>{agreements.length} agreements</p></div></div>
       {agreements.length === 0
-        ? <div className={styles.emptyState}><div className={styles.emptyIcon}>📄</div><p>No agreements yet. Apply for a property from the Browse tab!</p></div>
+        ? <div className={styles.emptyState}><div className={styles.emptyIcon}>📄</div><p>No agreements yet. Apply for a property!</p></div>
         : <div className={styles.tableWrapper}>
             <table className={styles.table}>
-              <thead><tr><th>#</th><th>Property</th><th>Location</th><th>Move-in</th><th>Move-out</th><th>Rent</th><th>Deposit</th></tr></thead>
+              <thead><tr><th>#</th><th>Property</th><th>Move-in</th><th>Move-out</th><th>Rent</th><th>Status</th><th>Action</th></tr></thead>
               <tbody>
                 {agreements.map((ag, i) => {
                   const p = properties.find(p => p.id === ag.property_id)
+                  const st = ag.status || 'active'
                   return (
                     <tr key={ag.id}>
                       <td>{i + 1}</td>
-                      <td><strong>{p?.title || `Property #${ag.property_id}`}</strong></td>
-                      <td>{p?.location || '—'}</td>
+                      <td><strong>{p?.title || `#${ag.property_id}`}</strong><br /><small>📍{p?.location}</small></td>
                       <td>{ag.start_date}</td>
                       <td>{ag.end_date}</td>
                       <td>₹{ag.rent?.toLocaleString()}/mo</td>
-                      <td>₹{ag.deposit?.toLocaleString()}</td>
+                      <td><span className={styles.statusBadge} style={{ background: statusColor[st] + '20', color: statusColor[st] }}>{statusLabel[st] || st}</span></td>
+                      <td>
+                        {st === 'pending_approval' && !ag.tenant_approved
+                          ? <button className={styles.approveBtn} onClick={() => handleApprove(ag.id)} disabled={approving[ag.id]}>
+                              {approving[ag.id] ? '...' : '✅ Approve'}
+                            </button>
+                          : <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{ag.tenant_approved ? 'Approved ✓' : '—'}</span>
+                        }
+                      </td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
+          </div>
+      }
+    </div>
+  )
+}
+
+/* ── MY REQUESTS ──────────────────────────────────────────── */
+function MyRequests({ myRequests, agreements, refresh }) {
+  const statusColor = { pending: '#f59e0b', accepted: '#10b981', rejected: '#ef4444' }
+  const statusIcon  = { pending: '⏳', accepted: '✅', rejected: '❌' }
+
+  return (
+    <div>
+      <div className={styles.pageHeader}><div><h2>My Rental Requests</h2><p className={styles.subtitle}>{myRequests.length} requests sent</p></div></div>
+      {myRequests.length === 0
+        ? <div className={styles.emptyState}><div className={styles.emptyIcon}>📬</div><p>No requests yet. Browse properties and add to cart!</p></div>
+        : <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {myRequests.map(r => (
+              <div key={r.id} className={styles.requestCard}>
+                <div className={styles.requestLeft}>
+                  <span className={styles.propIcon}>🏢</span>
+                  <div>
+                    <h4>{r.property?.title || `Property #${r.property_id}`}</h4>
+                    <p>📍 {r.property?.location}</p>
+                    <p>📅 {r.start_date} → {r.end_date}</p>
+                    <p>💰 ₹{r.property?.price?.toLocaleString()}/month</p>
+                  </div>
+                </div>
+                <div className={styles.requestRight}>
+                  <span className={styles.statusBadge} style={{ background: statusColor[r.status] + '20', color: statusColor[r.status], fontSize: '0.9rem', padding: '0.4rem 1rem' }}>
+                    {statusIcon[r.status]} {r.status?.toUpperCase()}
+                  </span>
+                  {r.status === 'accepted' && r.owner_contact && (
+                    <div className={styles.ownerContact}>
+                      <p><strong>🎉 Request Accepted!</strong></p>
+                      <p>Owner: <strong>{r.owner_contact.name}</strong></p>
+                      {r.owner_contact.phone && <p>📞 <strong>{r.owner_contact.phone}</strong></p>}
+                      <p>📧 {r.owner_contact.email}</p>
+                    </div>
+                  )}
+                  {r.status === 'rejected' && <p style={{ color: '#ef4444', fontSize: '0.85rem', marginTop: '0.5rem' }}>Request was declined by owner.</p>}
+                  {r.status === 'pending'  && <p style={{ color: '#94a3b8', fontSize: '0.85rem', marginTop: '0.5rem' }}>Waiting for owner to respond…</p>}
+                </div>
+              </div>
+            ))}
           </div>
       }
     </div>

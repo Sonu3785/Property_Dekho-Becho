@@ -8,6 +8,7 @@ import styles from './Dashboard.module.css'
 const TABS = [
   { id: 'overview',   icon: '📊', label: 'Overview'   },
   { id: 'properties', icon: '🏢', label: 'Properties'  },
+  { id: 'requests',   icon: '📬', label: 'Requests'    },
   { id: 'tenants',    icon: '👥', label: 'Tenants'     },
   { id: 'agreements', icon: '📄', label: 'Agreements'  },
   { id: 'payments',   icon: '💳', label: 'Payments'    },
@@ -20,36 +21,47 @@ export default function OwnerDashboard() {
   const [tenants, setTenants]       = useState([])
   const [payments, setPayments]     = useState([])
   const [agreements, setAgreements] = useState([])
+  const [requests, setRequests]     = useState([])
   const [loading, setLoading]       = useState(true)
 
   useEffect(() => { fetchAll() }, [])
 
   const fetchAll = async () => {
     setLoading(true)
-    const [p, t, pay, ag] = await Promise.allSettled([
+    const [p, t, pay, ag, req] = await Promise.allSettled([
       API.get('/properties/'),
       API.get('/tenants/'),
       API.get('/payments/'),
       API.get('/agreements/'),
+      API.get('/requests/incoming'),
     ])
     setProperties(p.status   === 'fulfilled' && Array.isArray(p.value.data)   ? p.value.data   : [])
     setTenants(   t.status   === 'fulfilled' && Array.isArray(t.value.data)   ? t.value.data   : [])
     setPayments(  pay.status === 'fulfilled' && Array.isArray(pay.value.data) ? pay.value.data : [])
     setAgreements(ag.status  === 'fulfilled' && Array.isArray(ag.value.data)  ? ag.value.data  : [])
+    setRequests(  req.status === 'fulfilled' && Array.isArray(req.value.data) ? req.value.data : [])
     setLoading(false)
   }
 
-  const ctx = { properties, tenants, payments, agreements, refresh: fetchAll, user }
+  const pendingCount = requests.filter(r => r.status === 'pending').length
+  const tabsWithBadge = TABS.map(t =>
+    t.id === 'requests' && pendingCount > 0
+      ? { ...t, label: `📬 Requests (${pendingCount})` }
+      : t
+  )
+
+  const ctx = { properties, tenants, payments, agreements, requests, refresh: fetchAll, user }
 
   return (
     <div className={styles.dashboard}>
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} tabs={TABS} />
+      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} tabs={tabsWithBadge} />
       <div className={styles.content}>
         {loading
           ? <div className={styles.loader}><span className={styles.spin} /></div>
           : <>
             {activeTab === 'overview'   && <Overview   {...ctx} setActiveTab={setActiveTab} />}
             {activeTab === 'properties' && <Properties {...ctx} />}
+            {activeTab === 'requests'   && <IncomingRequests {...ctx} />}
             {activeTab === 'tenants'    && <Tenants    {...ctx} />}
             {activeTab === 'agreements' && <Agreements {...ctx} />}
             {activeTab === 'payments'   && <Payments   {...ctx} />}
@@ -296,53 +308,9 @@ function Tenants({ tenants, properties, refresh }) {
 }
 
 /* ── AGREEMENTS ───────────────────────────────────────────────── */
-function Agreements({ properties, tenants, agreements, refresh }) {
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm]         = useState({ tenant_id:'', property_id:'', start_date:'', end_date:'', rent:'', deposit:'' })
-  const [saving, setSaving]     = useState(false)
-
-  const handleAdd = async (e) => {
-    e.preventDefault(); setSaving(true)
-    try {
-      await API.post('/agreements/', { tenant_id:parseInt(form.tenant_id), property_id:parseInt(form.property_id), start_date:form.start_date, end_date:form.end_date, rent:parseFloat(form.rent), deposit:parseFloat(form.deposit) })
-      toast.success('Agreement created!'); refresh(); setShowForm(false); setForm({tenant_id:'',property_id:'',start_date:'',end_date:'',rent:'',deposit:''})
-    } catch { toast.error('Failed to create') } finally { setSaving(false) }
-  }
-
-  return (
-    <div>
-      <div className={styles.pageHeader}>
-        <div><h2>Rental Agreements</h2><p className={styles.subtitle}>{agreements.length} agreements</p></div>
-        <button className={styles.addBtn} onClick={()=>setShowForm(v=>!v)}>{showForm?'✕ Cancel':'+ New Agreement'}</button>
-      </div>
-      {showForm && (
-        <div className={styles.formBox}>
-          <h3>📄 Create Agreement</h3>
-          <form onSubmit={handleAdd} className={styles.inlineForm}>
-            <select value={form.tenant_id}   onChange={e=>setForm({...form,tenant_id:e.target.value})} required><option value="">— Tenant —</option>{tenants.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select>
-            <select value={form.property_id} onChange={e=>setForm({...form,property_id:e.target.value})} required><option value="">— Property —</option>{properties.map(p=><option key={p.id} value={p.id}>{p.title}</option>)}</select>
-            <input type="date" value={form.start_date} onChange={e=>setForm({...form,start_date:e.target.value})} required />
-            <input type="date" value={form.end_date}   onChange={e=>setForm({...form,end_date:e.target.value})} required />
-            <input type="number" placeholder="Monthly Rent ₹"   value={form.rent}    onChange={e=>setForm({...form,rent:e.target.value})} required />
-            <input type="number" placeholder="Security Deposit ₹" value={form.deposit} onChange={e=>setForm({...form,deposit:e.target.value})} required />
-            <button type="submit" className={styles.saveBtn} disabled={saving}>{saving?'Creating...':'✓ Create'}</button>
-          </form>
-        </div>
-      )}
-      <div className={styles.tableWrapper}>
-        <table className={styles.table}>
-          <thead><tr><th>#</th><th>Tenant</th><th>Property</th><th>Start</th><th>End</th><th>Rent</th><th>Deposit</th></tr></thead>
-          <tbody>
-            {agreements.map((ag,i) => {
-              const t=tenants.find(t=>t.id===ag.tenant_id), p=properties.find(p=>p.id===ag.property_id)
-              return <tr key={ag.id}><td>{i+1}</td><td>{t?.name||`#${ag.tenant_id}`}</td><td>{p?.title||`#${ag.property_id}`}</td><td>{ag.start_date}</td><td>{ag.end_date}</td><td>₹{ag.rent?.toLocaleString()}</td><td>₹{ag.deposit?.toLocaleString()}</td></tr>
-            })}
-          </tbody>
-        </table>
-        {agreements.length===0 && <p className={styles.empty}>No agreements yet.</p>}
-      </div>
-    </div>
-  )
+// Note: Full Agreements component with approve is defined at end of file
+function AgreementsLegacy({ properties, tenants, agreements, refresh }) {
+  return null // replaced by full Agreements component below
 }
 
 /* ── PAYMENTS ─────────────────────────────────────────────────── */
@@ -405,6 +373,153 @@ function Payments({ payments, tenants, refresh }) {
           </tbody>
         </table>
         {filtered.length===0 && <p className={styles.empty}>No payments found.</p>}
+      </div>
+    </div>
+  )
+}
+
+/* ── INCOMING REQUESTS ────────────────────────────────────────── */
+function IncomingRequests({ requests, refresh }) {
+  const [acting, setActing] = useState({})
+
+  const handle = async (id, action) => {
+    setActing(s => ({ ...s, [id]: action }))
+    try {
+      await API.post(`/requests/${id}/${action}`)
+      toast.success(action === 'accept' ? '✅ Request accepted! Agreement created.' : '❌ Request rejected.')
+      refresh()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed')
+    } finally {
+      setActing(s => ({ ...s, [id]: null }))
+    }
+  }
+
+  const pending  = requests.filter(r => r.status === 'pending')
+  const others   = requests.filter(r => r.status !== 'pending')
+  const statusColor = { pending: '#f59e0b', accepted: '#10b981', rejected: '#ef4444' }
+
+  return (
+    <div>
+      <div className={styles.pageHeader}>
+        <div>
+          <h2>Rental Requests 📬</h2>
+          <p className={styles.subtitle}>{pending.length} pending · {requests.length} total</p>
+        </div>
+      </div>
+
+      {pending.length > 0 && <h3 className={styles.sectionHeading}>⏳ Pending Requests</h3>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
+        {pending.map(r => (
+          <div key={r.id} className={styles.requestCard}>
+            <div className={styles.requestLeft}>
+              <div className={styles.miniAvatar}>{r.tenant?.name?.[0]?.toUpperCase() || '?'}</div>
+              <div>
+                <h4>{r.tenant?.name || 'Unknown Tenant'}</h4>
+                <p>📧 {r.tenant?.email}</p>
+                <p>📞 {r.tenant?.phone || r.phone}</p>
+                <p>🏢 <strong>{r.property?.title}</strong> · 📍{r.property?.location}</p>
+                <p>📅 {r.start_date} → {r.end_date}</p>
+              </div>
+            </div>
+            <div className={styles.requestRight}>
+              <button
+                className={styles.acceptBtn}
+                onClick={() => handle(r.id, 'accept')}
+                disabled={acting[r.id]}
+              >
+                {acting[r.id] === 'accept' ? '...' : '✅ Accept'}
+              </button>
+              <button
+                className={styles.rejectBtn}
+                onClick={() => handle(r.id, 'reject')}
+                disabled={acting[r.id]}
+              >
+                {acting[r.id] === 'reject' ? '...' : '❌ Reject'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {others.length > 0 && (
+        <>
+          <h3 className={styles.sectionHeading}>History</h3>
+          <div className={styles.tableWrapper}>
+            <table className={styles.table}>
+              <thead><tr><th>Tenant</th><th>Property</th><th>Dates</th><th>Status</th></tr></thead>
+              <tbody>
+                {others.map(r => (
+                  <tr key={r.id}>
+                    <td><div className={styles.tenantName}><div className={styles.miniAvatar}>{r.tenant?.name?.[0]?.toUpperCase()}</div>{r.tenant?.name}</div></td>
+                    <td>{r.property?.title}</td>
+                    <td>{r.start_date} → {r.end_date}</td>
+                    <td><span className={styles.statusBadge} style={{ background: statusColor[r.status]+'20', color: statusColor[r.status] }}>{r.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {requests.length === 0 && (
+        <div className={styles.emptyState}><div className={styles.emptyIcon}>📬</div><p>No rental requests yet. Tenants will appear here when they apply.</p></div>
+      )}
+    </div>
+  )
+}
+
+/* ── AGREEMENTS (with approve) ─────────────────────────────────── */
+function Agreements({ properties, tenants, agreements, refresh }) {
+  const [approving, setApproving] = useState({})
+  const statusColor = { active: '#10b981', pending_approval: '#f59e0b', rejected: '#ef4444' }
+  const statusLabel = { active: '✅ Active', pending_approval: '⏳ Pending', rejected: '❌ Rejected' }
+
+  const handleApprove = async (agId) => {
+    setApproving(s => ({ ...s, [agId]: true }))
+    try {
+      const res = await API.post(`/requests/agreements/${agId}/owner-approve`)
+      toast.success(res.data.message); refresh()
+    } catch (err) { toast.error(err.response?.data?.detail || 'Failed') }
+    finally { setApproving(s => ({ ...s, [agId]: false })) }
+  }
+
+  return (
+    <div>
+      <div className={styles.pageHeader}>
+        <div><h2>Rental Agreements</h2><p className={styles.subtitle}>{agreements.length} total</p></div>
+      </div>
+      <div className={styles.tableWrapper}>
+        <table className={styles.table}>
+          <thead><tr><th>#</th><th>Tenant</th><th>Property</th><th>Dates</th><th>Rent</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody>
+            {agreements.map((ag, i) => {
+              const t = tenants.find(t => t.id === ag.tenant_id)
+              const p = properties.find(p => p.id === ag.property_id)
+              const st = ag.status || 'active'
+              return (
+                <tr key={ag.id}>
+                  <td>{i + 1}</td>
+                  <td><div className={styles.tenantName}><div className={styles.miniAvatar}>{t?.name?.[0]?.toUpperCase() || '?'}</div>{t?.name || `#${ag.tenant_id}`}</div></td>
+                  <td>{p?.title || `#${ag.property_id}`}</td>
+                  <td style={{ fontSize: '0.82rem' }}>{ag.start_date} → {ag.end_date}</td>
+                  <td>₹{ag.rent?.toLocaleString()}</td>
+                  <td><span className={styles.statusBadge} style={{ background: statusColor[st] + '20', color: statusColor[st] }}>{statusLabel[st] || st}</span></td>
+                  <td>
+                    {st === 'pending_approval' && !ag.owner_approved
+                      ? <button className={styles.approveBtn} onClick={() => handleApprove(ag.id)} disabled={approving[ag.id]}>
+                          {approving[ag.id] ? '...' : '✅ Approve'}
+                        </button>
+                      : <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>{ag.owner_approved ? 'Approved ✓' : '—'}</span>
+                    }
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+        {agreements.length === 0 && <p className={styles.empty}>No agreements yet. Accept a rental request to create one.</p>}
       </div>
     </div>
   )

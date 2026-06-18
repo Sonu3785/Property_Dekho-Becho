@@ -6,7 +6,8 @@ from app.routes import (
     property,
     tenant,
     agreement,
-    payment
+    payment,
+    rental_requests
 )
 
 app = FastAPI(
@@ -27,6 +28,7 @@ app.include_router(property.router)
 app.include_router(tenant.router)
 app.include_router(agreement.router)
 app.include_router(payment.router)
+app.include_router(rental_requests.router)
 
 @app.get("/")
 def root():

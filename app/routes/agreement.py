@@ -38,7 +38,7 @@ def create_agreement(
 
 @router.get("/")
 def get_agreements(owner_id: int = Depends(auth.get_current_user_id)):
-    """Return agreements for this owner's properties."""
+    """Return agreements for this owner's properties with full status."""
     props = (
         supabase.table("properties")
         .select("id")
@@ -60,8 +60,7 @@ def get_agreements(owner_id: int = Depends(auth.get_current_user_id)):
 
 @router.get("/my")
 def get_my_agreements(user_id: int = Depends(auth.get_current_user_id)):
-    """Tenant: return agreements where tenant email matches their account."""
-    # Find tenant record by matching user's registered email
+    """Tenant: return agreements by email match with full status."""
     user = (
         supabase.table("users")
         .select("email")

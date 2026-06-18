@@ -450,3 +450,89 @@
 .modalRow span { color: #64748b; }
 .modalRow strong { color: #1a202c; }
 .modalActions { display: flex; flex-direction: column; align-items: center; gap: 0.8rem; }
+
+/* ── REQUEST CARDS ──────────────────────────────────────── */
+.requestCard {
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  padding: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  flex-wrap: wrap;
+  transition: border-color 0.2s;
+}
+.requestCard:hover { border-color: #667eea; }
+
+.requestLeft {
+  display: flex;
+  gap: 1rem;
+  flex: 1;
+  min-width: 220px;
+}
+.requestLeft h4 { font-size: 1rem; font-weight: 700; color: #1a202c; margin-bottom: 0.3rem; }
+.requestLeft p  { font-size: 0.85rem; color: #64748b; margin: 0.1rem 0; }
+
+.requestRight {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.8rem;
+  min-width: 160px;
+}
+
+.acceptBtn {
+  padding: 0.6rem 1.4rem;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+}
+.acceptBtn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16,185,129,0.4); }
+
+.rejectBtn {
+  padding: 0.6rem 1.4rem;
+  background: #fef2f2;
+  color: #ef4444;
+  border: 1.5px solid #fecaca;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+}
+.rejectBtn:hover:not(:disabled) { background: #fee2e2; }
+
+.approveBtn {
+  padding: 0.4rem 1rem;
+  background: #d1fae5;
+  color: #065f46;
+  border: 1.5px solid #6ee7b7;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.approveBtn:hover:not(:disabled) { background: #a7f3d0; }
+.approveBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.ownerContact {
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: 10px;
+  padding: 0.8rem 1rem;
+  font-size: 0.85rem;
+  color: #166534;
+  text-align: right;
+}
+.ownerContact p { margin: 0.2rem 0; }
