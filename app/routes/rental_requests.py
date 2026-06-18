@@ -15,79 +15,83 @@ class RentalRequestCreate(BaseModel):
     message: Optional[str] = ""
 
 
-# ── TENANT: Submit a rental request ───────────────────────────────
 @router.post("/")
 def create_request(
     req: RentalRequestCreate,
     user_id: int = Depends(auth.get_current_user_id)
 ):
-    # Get user info
-    user = supabase.table("users").select("*").eq("id", user_id).execute()
-    if not user.data:
-        raise HTTPException(status_code=404, detail="User not found")
-    u = user.data[0]
+    try:
+        # Get user info
+        user = supabase.table("users").select("*").eq("id", user_id).execute()
+        if not user.data:
+            raise HTTPException(status_code=404, detail="User not found")
+        u = user.data[0]
 
-    # Get or create tenant record
-    tenant_rec = supabase.table("tenants").select("*").eq("email", u["email"]).execute()
-    if tenant_rec.data:
-        tenant_id = tenant_rec.data[0]["id"]
-        # Update phone if provided
-        if req.phone:
-            supabase.table("tenants").update({"phone": req.phone}).eq("id", tenant_id).execute()
-    else:
-        new_t = supabase.table("tenants").insert({
-            "name":        u["name"],
-            "email":       u["email"],
+        # Get or create tenant record
+        tenant_rec = supabase.table("tenants").select("*").eq("email", u["email"]).execute()
+        if tenant_rec.data:
+            tenant_id = tenant_rec.data[0]["id"]
+            if req.phone:
+                supabase.table("tenants").update({"phone": req.phone}).eq("id", tenant_id).execute()
+        else:
+            new_t = supabase.table("tenants").insert({
+                "name":        u["name"],
+                "email":       u["email"],
+                "phone":       req.phone,
+                "property_id": req.property_id
+            }).execute()
+            tenant_id = new_t.data[0]["id"]
+
+        # Check for duplicate
+        existing = (
+            supabase.table("rental_requests")
+            .select("id,status")
+            .eq("tenant_id", tenant_id)
+            .eq("property_id", req.property_id)
+            .execute()
+        )
+        if existing.data:
+            st = existing.data[0]["status"]
+            if st == "pending":
+                raise HTTPException(status_code=400, detail="You already have a pending request for this property")
+            if st == "accepted":
+                raise HTTPException(status_code=400, detail="Your request was already accepted")
+
+        # Get property + owner info
+        prop = supabase.table("properties").select("*").eq("id", req.property_id).execute()
+        if not prop.data:
+            raise HTTPException(status_code=404, detail="Property not found")
+        p = prop.data[0]
+
+        owner = supabase.table("users").select("name,phone,email").eq("id", p["owner_id"]).execute()
+        owner_info = owner.data[0] if owner.data else {}
+
+        # Insert rental request
+        result = supabase.table("rental_requests").insert({
+            "tenant_id":   tenant_id,
+            "property_id": req.property_id,
+            "start_date":  req.start_date,
+            "end_date":    req.end_date,
             "phone":       req.phone,
-            "property_id": req.property_id
+            "message":     req.message or "",
+            "status":      "pending"
         }).execute()
-        tenant_id = new_t.data[0]["id"]
 
-    # Check for duplicate pending request
-    existing = (
-        supabase.table("rental_requests")
-        .select("id,status")
-        .eq("tenant_id", tenant_id)
-        .eq("property_id", req.property_id)
-        .execute()
-    )
-    if existing.data:
-        st = existing.data[0]["status"]
-        if st == "pending":
-            raise HTTPException(status_code=400, detail="You already have a pending request for this property")
-        if st == "accepted":
-            raise HTTPException(status_code=400, detail="Your request was already accepted")
-
-    # Get property details + owner contact
-    prop = supabase.table("properties").select("*").eq("id", req.property_id).execute()
-    if not prop.data:
-        raise HTTPException(status_code=404, detail="Property not found")
-    p = prop.data[0]
-
-    # Get owner contact
-    owner = supabase.table("users").select("name,phone,email").eq("id", p["owner_id"]).execute()
-    owner_info = owner.data[0] if owner.data else {}
-
-    # Create the request
-    result = supabase.table("rental_requests").insert({
-        "tenant_id":   tenant_id,
-        "property_id": req.property_id,
-        "start_date":  req.start_date,
-        "end_date":    req.end_date,
-        "phone":       req.phone,
-        "message":     req.message or "",
-        "status":      "pending"
-    }).execute()
-
-    return {
-        "message":    "Request sent! Here is the owner's contact.",
-        "request":    result.data[0] if result.data else {},
-        "owner_contact": {
-            "name":  owner_info.get("name", ""),
-            "phone": owner_info.get("phone", ""),
-            "email": owner_info.get("email", "")
+        return {
+            "message": "Request sent! Here is the owner's contact.",
+            "request": result.data[0] if result.data else {},
+            "owner_contact": {
+                "name":  owner_info.get("name", ""),
+                "phone": owner_info.get("phone", ""),
+                "email": owner_info.get("email", "")
+            }
         }
-    }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("CREATE REQUEST ERROR:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── TENANT: Get my requests (with owner contact) ──────────────────
