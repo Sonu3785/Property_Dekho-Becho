@@ -25,9 +25,9 @@ export default function TenantDashboard() {
   const fetchAll = async () => {
     setLoading(true)
     const [p, pay, ag] = await Promise.allSettled([
-      API.get('/properties/'),
-      API.get('/payments/'),
-      API.get('/agreements/'),
+      API.get('/properties/all'),   // public — all properties for browsing
+      API.get('/payments/my'),      // tenant's own payments
+      API.get('/agreements/my'),    // tenant's own agreements
     ])
     setProperties( p.status  === 'fulfilled' && Array.isArray(p.value.data)   ? p.value.data   : [])
     setPayments(   pay.status === 'fulfilled' && Array.isArray(pay.value.data) ? pay.value.data : [])
