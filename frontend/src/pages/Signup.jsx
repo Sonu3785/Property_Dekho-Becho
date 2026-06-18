@@ -10,7 +10,7 @@ export default function Signup() {
   const { login } = useAuth()
   const [searchParams] = useSearchParams()
   const [role, setRole] = useState(searchParams.get('role') || 'owner')
-  const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' })
+  const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '', phone: '' })
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
@@ -37,9 +37,11 @@ export default function Signup() {
     setLoading(true)
     try {
       const res = await API.post('/users/register', {
-        name: form.name,
-        email: form.email,
-        password: form.password
+        name:     form.name,
+        email:    form.email,
+        password: form.password,
+        role:     role,
+        phone:    form.phone || ''
       })
 
       // Check for error in response
@@ -163,6 +165,20 @@ export default function Signup() {
                   value={form.email}
                   onChange={e => setForm({ ...form, email: e.target.value })}
                   required
+                />
+              </div>
+            </div>
+
+            <div className={styles.field}>
+              <label>Phone Number {role === 'tenant' ? '' : '(Optional)'}</label>
+              <div className={styles.inputWrapper}>
+                <span className={styles.inputIcon}>📱</span>
+                <input
+                  type="tel"
+                  placeholder="e.g. 9876543210"
+                  value={form.phone}
+                  onChange={e => setForm({ ...form, phone: e.target.value })}
+                  required={role === 'tenant'}
                 />
               </div>
             </div>

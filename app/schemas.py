@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from datetime import date
+from typing import Optional
 
 
 # ==========================
@@ -13,6 +14,8 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+    role: str = "owner"        # "owner" or "tenant"
+    phone: Optional[str] = None
 
 
 class UserLogin(BaseModel):
@@ -116,3 +119,15 @@ class PaymentResponse(PaymentBase):
 
     class Config:
         from_attributes = True
+
+
+# ==========================
+# RENTAL REQUEST SCHEMA
+# ==========================
+
+class RentalRequest(BaseModel):
+    property_id: int
+    phone: str
+    start_date: date
+    end_date: date
+    message: Optional[str] = ""

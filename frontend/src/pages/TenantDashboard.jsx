@@ -4,52 +4,99 @@ import API from '../api/axios'
 import toast from 'react-hot-toast'
 import Navbar from '../components/Navbar'
 import styles from './Dashboard.module.css'
+import cartStyles from './Cart.module.css'
 
 const TABS = [
-  { id: 'overview',    icon: '📊', label: 'Overview' },
-  { id: 'properties',  icon: '🏢', label: 'Browse Properties' },
-  { id: 'agreements',  icon: '📄', label: 'My Agreement' },
-  { id: 'payments',    icon: '💳', label: 'Payments' },
+  { id: 'overview',   icon: '📊', label: 'Overview'        },
+  { id: 'browse',     icon: '🏢', label: 'Browse'          },
+  { id: 'cart',       icon: '🛒', label: 'My Cart'         },
+  { id: 'agreements', icon: '📄', label: 'My Agreements'   },
+  { id: 'payments',   icon: '💳', label: 'My Payments'     },
 ]
 
 export default function TenantDashboard() {
   const { user } = useAuth()
-  const [activeTab, setActiveTab]     = useState('overview')
-  const [properties, setProperties]   = useState([])
-  const [payments, setPayments]       = useState([])
-  const [agreements, setAgreements]   = useState([])
-  const [loading, setLoading]         = useState(false)
+  const [activeTab, setActiveTab]   = useState('overview')
+  const [properties, setProperties] = useState([])
+  const [payments, setPayments]     = useState([])
+  const [agreements, setAgreements] = useState([])
+  const [cart, setCart]             = useState([])           // [{property, startDate, endDate, phone}]
+  const [loading, setLoading]       = useState(true)
 
-  useEffect(() => { fetchAll() }, [])
+  useEffect(() => {
+    fetchAll()
+    // Load cart from localStorage
+    const saved = localStorage.getItem('pd_cart')
+    if (saved) try { setCart(JSON.parse(saved)) } catch {}
+  }, [])
 
   const fetchAll = async () => {
     setLoading(true)
     const [p, pay, ag] = await Promise.allSettled([
-      API.get('/properties/all'),   // public — all properties for browsing
-      API.get('/payments/my'),      // tenant's own payments
-      API.get('/agreements/my'),    // tenant's own agreements
+      API.get('/properties/all'),
+      API.get('/payments/my'),
+      API.get('/agreements/my'),
     ])
-    setProperties( p.status  === 'fulfilled' && Array.isArray(p.value.data)   ? p.value.data   : [])
-    setPayments(   pay.status === 'fulfilled' && Array.isArray(pay.value.data) ? pay.value.data : [])
-    setAgreements( ag.status  === 'fulfilled' && Array.isArray(ag.value.data)  ? ag.value.data  : [])
+    setProperties(p.status   === 'fulfilled' && Array.isArray(p.value.data)   ? p.value.data   : [])
+    setPayments(  pay.status === 'fulfilled' && Array.isArray(pay.value.data) ? pay.value.data : [])
+    setAgreements(ag.status  === 'fulfilled' && Array.isArray(ag.value.data)  ? ag.value.data  : [])
     setLoading(false)
   }
 
+  const saveCart = (items) => {
+    setCart(items)
+    localStorage.setItem('pd_cart', JSON.stringify(items))
+  }
+
+  const addToCart = (property) => {
+    if (cart.find(c => c.property.id === property.id)) {
+      toast.error('Already in your cart!')
+      return
+    }
+    const updated = [...cart, { property, phone: user?.phone || '', startDate: '', endDate: '' }]
+    saveCart(updated)
+    toast.success(`${property.title} added to cart! 🛒`)
+    setActiveTab('cart')
+  }
+
+  const removeFromCart = (propertyId) => {
+    saveCart(cart.filter(c => c.property.id !== propertyId))
+    toast.success('Removed from cart')
+  }
+
+  const updateCartItem = (propertyId, field, value) => {
+    saveCart(cart.map(c => c.property.id === propertyId ? { ...c, [field]: value } : c))
+  }
+
+  const cartCount = cart.length
+
+  const tabsWithBadge = TABS.map(t =>
+    t.id === 'cart' && cartCount > 0
+      ? { ...t, label: `🛒 Cart (${cartCount})` }
+      : t
+  )
+
   return (
     <div className={styles.dashboard}>
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} tabs={TABS} />
+      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} tabs={tabsWithBadge} />
       <div className={styles.content}>
-        {loading && <div className={styles.loader}><span className={styles.spin} /></div>}
-        {!loading && activeTab === 'overview'   && <TenantOverview   properties={properties} payments={payments} agreements={agreements} user={user} setActiveTab={setActiveTab} />}
-        {!loading && activeTab === 'properties' && <BrowseProperties properties={properties} />}
-        {!loading && activeTab === 'agreements' && <TenantAgreements agreements={agreements} properties={properties} />}
-        {!loading && activeTab === 'payments'   && <TenantPayments   payments={payments} />}
+        {loading
+          ? <div className={styles.loader}><span className={styles.spin} /></div>
+          : <>
+            {activeTab === 'overview'   && <TenantOverview properties={properties} payments={payments} agreements={agreements} user={user} setActiveTab={setActiveTab} cartCount={cartCount} />}
+            {activeTab === 'browse'     && <BrowseProperties properties={properties} agreements={agreements} addToCart={addToCart} cart={cart} />}
+            {activeTab === 'cart'       && <CartPage cart={cart} removeFromCart={removeFromCart} updateCartItem={updateCartItem} saveCart={saveCart} user={user} refresh={fetchAll} setActiveTab={setActiveTab} />}
+            {activeTab === 'agreements' && <MyAgreements agreements={agreements} properties={properties} />}
+            {activeTab === 'payments'   && <MyPayments payments={payments} />}
+          </>
+        }
       </div>
     </div>
   )
 }
 
-function TenantOverview({ properties, payments, agreements, user, setActiveTab }) {
+/* ── OVERVIEW ─────────────────────────────────────────────── */
+function TenantOverview({ properties, payments, agreements, user, setActiveTab, cartCount }) {
   const paid    = payments.filter(p => p.status === 'paid').length
   const pending = payments.filter(p => p.status === 'pending').length
 
@@ -63,60 +110,47 @@ function TenantOverview({ properties, payments, agreements, user, setActiveTab }
       </div>
       <div className={styles.statsGrid}>
         {[
-          { icon: '🏢', label: 'Available Properties', value: properties.length, color: '#667eea', tab: 'properties' },
-          { icon: '📄', label: 'My Agreements',         value: agreements.length, color: '#8b5cf6', tab: 'agreements' },
-          { icon: '✅', label: 'Paid Payments',          value: paid,              color: '#10b981', tab: 'payments'   },
-          { icon: '⏳', label: 'Pending',                value: pending,           color: '#f59e0b', tab: 'payments'   },
+          { icon: '🏢', label: 'Available Props',  value: properties.length, color: '#667eea', tab: 'browse'     },
+          { icon: '📄', label: 'My Agreements',     value: agreements.length, color: '#8b5cf6', tab: 'agreements' },
+          { icon: '✅', label: 'Paid',               value: paid,             color: '#10b981', tab: 'payments'   },
+          { icon: '🛒', label: 'Cart Items',         value: cartCount,        color: '#f59e0b', tab: 'cart'       },
         ].map((s, i) => (
           <div key={i} className={styles.statCard} onClick={() => setActiveTab(s.tab)} style={{ borderTopColor: s.color }}>
             <div className={styles.statIcon} style={{ background: s.color + '20', color: s.color }}>{s.icon}</div>
-            <div>
-              <div className={styles.statValue}>{s.value}</div>
-              <div className={styles.statLabel}>{s.label}</div>
-            </div>
+            <div><div className={styles.statValue}>{s.value}</div><div className={styles.statLabel}>{s.label}</div></div>
           </div>
         ))}
       </div>
-      <div className={styles.overviewGrid}>
-        <div className={styles.overviewCard}>
-          <h3>Browse Properties</h3>
-          {properties.slice(0, 5).map(p => (
-            <div key={p.id} className={styles.listRow}>
-              <span className={styles.listIcon}>🏢</span>
-              <div className={styles.listInfo}>
-                <div className={styles.listTitle}>{p.title}</div>
-                <div className={styles.listSub}>📍 {p.location}</div>
+
+      <h3 className={styles.sectionHeading}>Available Properties</h3>
+      {properties.length === 0
+        ? <div className={styles.emptyState}><div className={styles.emptyIcon}>🏢</div><p>No properties available yet.</p></div>
+        : <div className={styles.cardGrid}>
+            {properties.slice(0, 6).map(p => (
+              <div key={p.id} className={styles.propCard}>
+                <div className={styles.propCardHeader}><span className={styles.propIcon}>🏢</span><span className={styles.availBadge}>Available</span></div>
+                <h4>{p.title}</h4>
+                <p className={styles.propLocation}>📍 {p.location}</p>
+                <div className={styles.propPrice}>₹{p.price?.toLocaleString()}<span>/month</span></div>
+                <button className={styles.contactBtn} onClick={() => setActiveTab('browse')}>View Details →</button>
               </div>
-              <div className={styles.listBadge}>₹{p.price?.toLocaleString()}</div>
-            </div>
-          ))}
-          {properties.length === 0 && <p className={styles.empty}>No properties available yet</p>}
-        </div>
-        <div className={styles.overviewCard}>
-          <h3>Recent Payments</h3>
-          {payments.slice(0, 5).map(p => (
-            <div key={p.id} className={styles.listRow}>
-              <span className={styles.listIcon}>💰</span>
-              <div className={styles.listInfo}>
-                <div className={styles.listTitle}>₹{p.amount?.toLocaleString()}</div>
-                <div className={styles.listSub}>{p.date}</div>
-              </div>
-              <span className={`${styles.statusBadge} ${styles[p.status]}`}>{p.status}</span>
-            </div>
-          ))}
-          {payments.length === 0 && <p className={styles.empty}>No payment records yet</p>}
-        </div>
-      </div>
+            ))}
+          </div>
+      }
     </div>
   )
 }
 
-function BrowseProperties({ properties }) {
-  const [search, setSearch]   = useState('')
-  const [sortBy, setSortBy]   = useState('price')
-  const [sortDir, setSortDir] = useState('asc')
-  const [maxPrice, setMaxPrice] = useState('')
-  const [contacted, setContacted] = useState({})
+/* ── BROWSE PROPERTIES ────────────────────────────────────── */
+function BrowseProperties({ properties, agreements, addToCart, cart }) {
+  const [search, setSearch]       = useState('')
+  const [maxPrice, setMaxPrice]   = useState('')
+  const [sortBy, setSortBy]       = useState('price')
+  const [sortDir, setSortDir]     = useState('asc')
+  const [selected, setSelected]   = useState(null)   // property detail modal
+
+  const alreadyRequested = agreements.map(a => a.property_id)
+  const inCart           = cart.map(c => c.property.id)
 
   const filtered = properties
     .filter(p => {
@@ -127,133 +161,280 @@ function BrowseProperties({ properties }) {
     })
     .sort((a, b) => {
       let av = a[sortBy], bv = b[sortBy]
-      if (typeof av === 'string') { av = av.toLowerCase(); bv = bv?.toLowerCase() }
+      if (typeof av === 'string') { av = av.toLowerCase(); bv = (bv||'').toLowerCase() }
       return sortDir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1)
     })
-
-  const handleContact = (id, title) => {
-    setContacted(prev => ({ ...prev, [id]: true }))
-    toast.success(`Interest sent for "${title}"! Owner will contact you.`)
-  }
 
   return (
     <div>
       <div className={styles.pageHeader}>
-        <div>
-          <h2>Browse Properties</h2>
-          <p className={styles.subtitle}>{filtered.length} of {properties.length} properties available</p>
-        </div>
+        <div><h2>Browse Properties</h2><p className={styles.subtitle}>{filtered.length} of {properties.length} available</p></div>
       </div>
+
       <div className={styles.toolbar}>
-        <input className={styles.search} placeholder="🔍 Search by name or location..." value={search} onChange={e => setSearch(e.target.value)} />
-        <input className={styles.search} style={{ maxWidth: 200 }} type="number" placeholder="Max Price (₹)" value={maxPrice} onChange={e => setMaxPrice(e.target.value)} />
+        <input className={styles.search} placeholder="🔍  Search title or location…" value={search} onChange={e => setSearch(e.target.value)} />
+        <input className={styles.search} style={{ maxWidth: 180 }} type="number" placeholder="Max Rent ₹" value={maxPrice} onChange={e => setMaxPrice(e.target.value)} />
         <select className={styles.select} value={sortBy} onChange={e => setSortBy(e.target.value)}>
           <option value="price">Sort: Price</option>
           <option value="title">Sort: Title</option>
           <option value="location">Sort: Location</option>
         </select>
         <button className={styles.sortBtn} onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}>
-          {sortDir === 'asc' ? '↑ Low to High' : '↓ High to Low'}
+          {sortDir === 'asc' ? '↑ Low→High' : '↓ High→Low'}
         </button>
       </div>
+
       <div className={styles.cardGrid}>
-        {filtered.map(p => (
-          <div key={p.id} className={styles.propCard}>
-            <div className={styles.propCardHeader}>
-              <span className={styles.propIcon}>🏢</span>
-              <span className={styles.availBadge}>Available</span>
+        {filtered.map(p => {
+          const requested = alreadyRequested.includes(p.id)
+          const carted    = inCart.includes(p.id)
+          return (
+            <div key={p.id} className={styles.propCard}>
+              <div className={styles.propCardHeader}>
+                <span className={styles.propIcon}>🏢</span>
+                {requested && <span className={styles.availBadge} style={{ background: '#d1fae5', color: '#065f46' }}>✅ Requested</span>}
+                {!requested && carted && <span className={styles.availBadge} style={{ background: '#fef3c7', color: '#92400e' }}>🛒 In Cart</span>}
+                {!requested && !carted && <span className={styles.availBadge}>Available</span>}
+              </div>
+              <h4>{p.title}</h4>
+              <p className={styles.propLocation}>📍 {p.location}</p>
+              <div className={styles.propPrice}>₹{p.price?.toLocaleString()}<span>/month</span></div>
+              <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '0.3rem 0' }}>Deposit: ₹{(p.price * 2)?.toLocaleString()}</p>
+              <div className={styles.propActions}>
+                <button className={styles.detailBtn} onClick={() => setSelected(p)}>View Details</button>
+                {!requested && !carted &&
+                  <button className={styles.cartBtn} onClick={() => addToCart(p)}>🛒 Add to Cart</button>
+                }
+                {carted && !requested &&
+                  <button className={styles.cartedBtn} disabled>🛒 In Cart</button>
+                }
+                {requested &&
+                  <button className={styles.requestedBtn} disabled>✅ Applied</button>
+                }
+              </div>
             </div>
-            <h4>{p.title}</h4>
-            <p className={styles.propLocation}>📍 {p.location}</p>
-            <div className={styles.propPrice}>₹{p.price?.toLocaleString()}<span>/month</span></div>
-            <button
-              className={contacted[p.id] ? styles.contactedBtn : styles.contactBtn}
-              onClick={() => handleContact(p.id, p.title)}
-              disabled={contacted[p.id]}
-            >
-              {contacted[p.id] ? '✅ Interest Sent' : 'Show Interest'}
-            </button>
+          )
+        })}
+        {filtered.length === 0 && <div className={styles.emptyState}><div className={styles.emptyIcon}>🔍</div><p>No properties match your search.</p></div>}
+      </div>
+
+      {/* Property Detail Modal */}
+      {selected && (
+        <div className={styles.modalOverlay} onClick={() => setSelected(null)}>
+          <div className={styles.modal} onClick={e => e.stopPropagation()}>
+            <button className={styles.modalClose} onClick={() => setSelected(null)}>✕</button>
+            <div className={styles.modalIcon}>🏢</div>
+            <h2>{selected.title}</h2>
+            <p className={styles.modalLocation}>📍 {selected.location}</p>
+            <div className={styles.modalDetails}>
+              <div className={styles.modalRow}><span>Monthly Rent</span><strong>₹{selected.price?.toLocaleString()}</strong></div>
+              <div className={styles.modalRow}><span>Security Deposit</span><strong>₹{(selected.price * 2)?.toLocaleString()}</strong></div>
+              <div className={styles.modalRow}><span>Property ID</span><strong>#{selected.id}</strong></div>
+            </div>
+            <div className={styles.modalActions}>
+              {!alreadyRequested.includes(selected.id) && !inCart.includes(selected.id) &&
+                <button className={styles.cartBtn} style={{ width: '100%' }} onClick={() => { addToCart(selected); setSelected(null) }}>
+                  🛒 Add to Cart & Apply for Rent
+                </button>
+              }
+              {inCart.includes(selected.id) && <p style={{ color: '#f59e0b', fontWeight: 700 }}>🛒 Already in your cart</p>}
+              {alreadyRequested.includes(selected.id) && <p style={{ color: '#10b981', fontWeight: 700 }}>✅ Rental request already submitted</p>}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── CART PAGE ────────────────────────────────────────────── */
+function CartPage({ cart, removeFromCart, updateCartItem, saveCart, user, refresh, setActiveTab }) {
+  const [submitting, setSubmitting] = useState({})
+
+  const handleSubmitOne = async (item) => {
+    if (!item.startDate || !item.endDate) { toast.error('Select start and end date for ' + item.property.title); return }
+    if (!item.phone) { toast.error('Enter your phone number'); return }
+    if (new Date(item.endDate) <= new Date(item.startDate)) { toast.error('End date must be after start date'); return }
+
+    setSubmitting(s => ({ ...s, [item.property.id]: true }))
+    try {
+      await API.post('/tenants/request-rental', {
+        property_id: item.property.id,
+        phone:       item.phone,
+        start_date:  item.startDate,
+        end_date:    item.endDate,
+        message:     ''
+      })
+      toast.success(`Rental request sent for "${item.property.title}"! 🎉`)
+      removeFromCart(item.property.id)
+      refresh()
+    } catch (err) {
+      const msg = err.response?.data?.detail
+      toast.error(typeof msg === 'string' ? msg : 'Failed to submit request')
+    } finally {
+      setSubmitting(s => ({ ...s, [item.property.id]: false }))
+    }
+  }
+
+  const handleSubmitAll = async () => {
+    const valid = cart.filter(c => c.startDate && c.endDate && c.phone)
+    if (valid.length === 0) { toast.error('Fill in dates and phone for all items'); return }
+    for (const item of valid) await handleSubmitOne(item)
+  }
+
+  if (cart.length === 0) {
+    return (
+      <div>
+        <div className={styles.pageHeader}><div><h2>My Cart</h2><p className={styles.subtitle}>Properties you want to rent</p></div></div>
+        <div className={styles.emptyState}>
+          <div className={styles.emptyIcon}>🛒</div>
+          <p>Your cart is empty.<br />Browse properties and click <strong>"Add to Cart"</strong>!</p>
+          <button className={styles.addBtn} style={{ marginTop: '1rem' }} onClick={() => setActiveTab('browse')}>Browse Properties →</button>
+        </div>
+      </div>
+    )
+  }
+
+  const totalRent = cart.reduce((s, c) => s + (c.property.price || 0), 0)
+
+  return (
+    <div>
+      <div className={styles.pageHeader}>
+        <div><h2>My Cart 🛒</h2><p className={styles.subtitle}>{cart.length} properties · ₹{totalRent.toLocaleString()}/month total</p></div>
+        <button className={styles.addBtn} onClick={handleSubmitAll}>✅ Submit All Requests</button>
+      </div>
+
+      <div className={cartStyles.cartList}>
+        {cart.map(item => (
+          <div key={item.property.id} className={cartStyles.cartCard}>
+            <div className={cartStyles.cartLeft}>
+              <div className={cartStyles.cartIcon}>🏢</div>
+              <div>
+                <h3>{item.property.title}</h3>
+                <p>📍 {item.property.location}</p>
+                <div className={cartStyles.cartPrice}>₹{item.property.price?.toLocaleString()}<span>/month</span></div>
+                <p className={cartStyles.cartDeposit}>Deposit: ₹{(item.property.price * 2)?.toLocaleString()}</p>
+              </div>
+            </div>
+            <div className={cartStyles.cartRight}>
+              <div className={cartStyles.cartField}>
+                <label>📱 Phone</label>
+                <input
+                  type="tel"
+                  placeholder="Your phone number"
+                  value={item.phone}
+                  onChange={e => updateCartItem(item.property.id, 'phone', e.target.value)}
+                />
+              </div>
+              <div className={cartStyles.cartField}>
+                <label>📅 Move-in Date</label>
+                <input
+                  type="date"
+                  value={item.startDate}
+                  min={new Date().toISOString().split('T')[0]}
+                  onChange={e => updateCartItem(item.property.id, 'startDate', e.target.value)}
+                />
+              </div>
+              <div className={cartStyles.cartField}>
+                <label>📅 Move-out Date</label>
+                <input
+                  type="date"
+                  value={item.endDate}
+                  min={item.startDate || new Date().toISOString().split('T')[0]}
+                  onChange={e => updateCartItem(item.property.id, 'endDate', e.target.value)}
+                />
+              </div>
+              <div className={cartStyles.cartBtns}>
+                <button
+                  className={cartStyles.submitBtn}
+                  onClick={() => handleSubmitOne(item)}
+                  disabled={submitting[item.property.id]}
+                >
+                  {submitting[item.property.id] ? 'Submitting…' : '✅ Apply for Rent'}
+                </button>
+                <button className={cartStyles.removeBtn} onClick={() => removeFromCart(item.property.id)}>🗑️ Remove</button>
+              </div>
+            </div>
           </div>
         ))}
-        {filtered.length === 0 && <p className={styles.empty}>No properties match your search. Try adjusting filters.</p>}
+      </div>
+
+      <div className={cartStyles.cartSummary}>
+        <div>Total Monthly Rent: <strong>₹{totalRent.toLocaleString()}</strong></div>
+        <div>Total Deposit: <strong>₹{(totalRent * 2).toLocaleString()}</strong></div>
       </div>
     </div>
   )
 }
 
-function TenantAgreements({ agreements, properties }) {
+/* ── MY AGREEMENTS ────────────────────────────────────────── */
+function MyAgreements({ agreements, properties }) {
   return (
     <div>
-      <div className={styles.pageHeader}>
-        <div>
-          <h2>My Rental Agreements</h2>
-          <p className={styles.subtitle}>{agreements.length} agreements found</p>
-        </div>
-      </div>
-      <div className={styles.tableWrapper}>
-        <table className={styles.table}>
-          <thead>
-            <tr><th>#</th><th>Property</th><th>Start Date</th><th>End Date</th><th>Rent</th><th>Deposit</th></tr>
-          </thead>
-          <tbody>
-            {agreements.map((ag, i) => {
-              const p = properties.find(p => p.id === ag.property_id)
-              return (
-                <tr key={ag.id}>
-                  <td>{i + 1}</td>
-                  <td>{p ? <><strong>{p.title}</strong><br /><small>📍 {p.location}</small></> : `Property #${ag.property_id}`}</td>
-                  <td>{ag.start_date}</td>
-                  <td>{ag.end_date}</td>
-                  <td>₹{ag.rent?.toLocaleString()}/mo</td>
-                  <td>₹{ag.deposit?.toLocaleString()}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-        {agreements.length === 0 && <p className={styles.empty}>No agreements yet. Contact an owner to get started.</p>}
-      </div>
+      <div className={styles.pageHeader}><div><h2>My Agreements</h2><p className={styles.subtitle}>{agreements.length} agreements</p></div></div>
+      {agreements.length === 0
+        ? <div className={styles.emptyState}><div className={styles.emptyIcon}>📄</div><p>No agreements yet. Apply for a property from the Browse tab!</p></div>
+        : <div className={styles.tableWrapper}>
+            <table className={styles.table}>
+              <thead><tr><th>#</th><th>Property</th><th>Location</th><th>Move-in</th><th>Move-out</th><th>Rent</th><th>Deposit</th></tr></thead>
+              <tbody>
+                {agreements.map((ag, i) => {
+                  const p = properties.find(p => p.id === ag.property_id)
+                  return (
+                    <tr key={ag.id}>
+                      <td>{i + 1}</td>
+                      <td><strong>{p?.title || `Property #${ag.property_id}`}</strong></td>
+                      <td>{p?.location || '—'}</td>
+                      <td>{ag.start_date}</td>
+                      <td>{ag.end_date}</td>
+                      <td>₹{ag.rent?.toLocaleString()}/mo</td>
+                      <td>₹{ag.deposit?.toLocaleString()}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+      }
     </div>
   )
 }
 
-function TenantPayments({ payments }) {
-  const [statusFilter, setStatusFilter] = useState('all')
-  const filtered = statusFilter === 'all' ? payments : payments.filter(p => p.status === statusFilter)
-  const total = filtered.reduce((s, p) => s + (p.amount || 0), 0)
+/* ── MY PAYMENTS ──────────────────────────────────────────── */
+function MyPayments({ payments }) {
+  const [filter, setFilter] = useState('all')
+  const filtered = filter === 'all' ? payments : payments.filter(p => p.status === filter)
+  const total    = filtered.reduce((s, p) => s + (p.amount || 0), 0)
 
   return (
     <div>
-      <div className={styles.pageHeader}>
-        <div>
-          <h2>Payment History</h2>
-          <p className={styles.subtitle}>Total: ₹{total.toLocaleString()}</p>
-        </div>
-      </div>
+      <div className={styles.pageHeader}><div><h2>My Payments</h2><p className={styles.subtitle}>Total: ₹{total.toLocaleString()}</p></div></div>
       <div className={styles.toolbar}>
-        <select className={styles.select} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-          <option value="all">All Payments</option>
+        <select className={styles.select} value={filter} onChange={e => setFilter(e.target.value)}>
+          <option value="all">All</option>
           <option value="paid">✅ Paid</option>
           <option value="pending">⏳ Pending</option>
           <option value="overdue">❌ Overdue</option>
         </select>
       </div>
-      <div className={styles.tableWrapper}>
-        <table className={styles.table}>
-          <thead><tr><th>#</th><th>Amount</th><th>Date</th><th>Status</th></tr></thead>
-          <tbody>
-            {filtered.map((p, i) => (
-              <tr key={p.id}>
-                <td>{i + 1}</td>
-                <td>₹{p.amount?.toLocaleString()}</td>
-                <td>{p.date}</td>
-                <td><span className={`${styles.statusBadge} ${styles[p.status]}`}>{p.status === 'paid' ? '✅' : p.status === 'pending' ? '⏳' : '❌'} {p.status}</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {filtered.length === 0 && <p className={styles.empty}>No payments found.</p>}
-      </div>
+      {filtered.length === 0
+        ? <div className={styles.emptyState}><div className={styles.emptyIcon}>💳</div><p>No payment records yet.</p></div>
+        : <div className={styles.tableWrapper}>
+            <table className={styles.table}>
+              <thead><tr><th>#</th><th>Amount</th><th>Date</th><th>Status</th></tr></thead>
+              <tbody>
+                {filtered.map((p, i) => (
+                  <tr key={p.id}>
+                    <td>{i + 1}</td>
+                    <td>₹{p.amount?.toLocaleString()}</td>
+                    <td>{p.date}</td>
+                    <td><span className={`${styles.statusBadge} ${styles[p.status]}`}>{p.status === 'paid' ? '✅' : p.status === 'pending' ? '⏳' : '❌'} {p.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+      }
     </div>
   )
 }

@@ -371,3 +371,82 @@
   color: #94a3b8;
   margin-top: 0.4rem;
 }
+
+/* ── PROPERTY CARD ACTIONS ─────────────────────────────── */
+.propActions { display: flex; gap: 0.5rem; margin-top: 0.8rem; flex-wrap: wrap; }
+
+.detailBtn {
+  flex: 1;
+  padding: 0.55rem 0.5rem;
+  background: #f1f5f9;
+  color: #4f46e5;
+  border: 1.5px solid #c7d2fe;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.detailBtn:hover { background: #ede9fe; }
+
+.cartBtn {
+  flex: 1;
+  padding: 0.55rem 0.5rem;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.cartBtn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(245,158,11,0.4); }
+
+.cartedBtn, .requestedBtn {
+  flex: 1;
+  padding: 0.55rem 0.5rem;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.82rem;
+  border: none;
+  cursor: not-allowed;
+}
+.cartedBtn    { background: #fef3c7; color: #92400e; }
+.requestedBtn { background: #d1fae5; color: #065f46; }
+
+/* ── MODAL ──────────────────────────────────────────────── */
+.modalOverlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; padding: 1rem;
+}
+.modal {
+  background: white;
+  border-radius: 20px;
+  padding: 2.5rem;
+  max-width: 440px;
+  width: 100%;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  text-align: center;
+}
+.modalClose {
+  position: absolute; top: 1rem; right: 1rem;
+  background: #f1f5f9; border: none; border-radius: 50%;
+  width: 32px; height: 32px; font-size: 1rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.2s;
+}
+.modalClose:hover { background: #fee2e2; color: #ef4444; }
+.modalIcon { font-size: 3rem; margin-bottom: 0.8rem; }
+.modal h2 { font-size: 1.3rem; font-weight: 800; color: #1a202c; margin-bottom: 0.3rem; }
+.modalLocation { color: #64748b; font-size: 0.9rem; margin-bottom: 1.5rem; }
+.modalDetails { background: #f8fafc; border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem; text-align: left; }
+.modalRow { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #e2e8f0; font-size: 0.9rem; }
+.modalRow:last-child { border-bottom: none; }
+.modalRow span { color: #64748b; }
+.modalRow strong { color: #1a202c; }
+.modalActions { display: flex; flex-direction: column; align-items: center; gap: 0.8rem; }

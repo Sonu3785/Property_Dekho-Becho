@@ -28,13 +28,14 @@ export default function Login() {
 
       if (res.data.access_token) {
         login(res.data.access_token, {
-          id: res.data.user?.id,
+          id:    res.data.user?.id,
           email: form.email,
-          role: role,
-          name: res.data.user?.name || form.email.split('@')[0]
+          role:  res.data.user?.role || role,   // prefer backend role
+          name:  res.data.user?.name || form.email.split('@')[0],
+          phone: res.data.user?.phone || ''
         })
         toast.success(`Welcome back! 👋`)
-        navigate(role === 'owner' ? '/owner' : '/tenant')
+        navigate(res.data.user?.role === 'tenant' ? '/tenant' : '/owner')
       } else {
         toast.error(String(res.data.error || 'Invalid credentials'))
       }
