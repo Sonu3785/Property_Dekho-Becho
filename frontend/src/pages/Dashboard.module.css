@@ -345,3 +345,29 @@
   .toolbar { flex-direction: column; }
   .search { min-width: unset; width: 100%; }
 }
+
+/* ── NEW CLASSES ───────────────────────────────────────────── */
+.sectionHeading {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 2rem 0 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.emptyState {
+  text-align: center;
+  padding: 4rem 2rem;
+  background: white;
+  border-radius: 16px;
+  border: 2px dashed #e2e8f0;
+}
+.emptyIcon { font-size: 3.5rem; margin-bottom: 1rem; }
+.emptyState p { color: #64748b; font-size: 0.95rem; }
+
+.propId {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-top: 0.4rem;
+}
