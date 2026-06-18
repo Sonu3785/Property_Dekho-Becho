@@ -15,24 +15,16 @@ def register(user: schemas.UserCreate):
 
         hashed_password = auth.hash_password(user.password)
 
-        # Insert into users table (only columns that exist)
+        # Insert into users table with role and phone
         response = supabase.table("users").insert({
             "name":     user.name,
             "email":    user.email,
             "password": hashed_password,
+            "role":     user.role,
+            "phone":    user.phone or ""
         }).execute()
 
         new_user = response.data[0] if response.data else None
-
-        # Try to store role & phone — may fail if columns don't exist yet
-        if new_user:
-            try:
-                supabase.table("users").update({
-                    "role":  user.role,
-                    "phone": user.phone or ""
-                }).eq("id", new_user["id"]).execute()
-            except Exception:
-                pass  # columns not added yet — non-fatal
 
         # If registering as tenant → auto-create tenant record
         if user.role == "tenant" and new_user:
