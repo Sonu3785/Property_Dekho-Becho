@@ -16,11 +16,8 @@ ALGORITHM = os.getenv("JWT_ALGORITHM")
 
 
 def hash_password(password: str):
-    print("HASH_PASSWORD CALLED")
-    print("VALUE:", password)
-    print("TYPE:", type(password))
-    print("LENGTH:", len(str(password)))
-
+    # bcrypt has a 72-byte limit, truncate to be safe
+    password = password[:72]
     return pwd_context.hash(password)
 
 
@@ -28,6 +25,8 @@ def verify_password(
     plain_password: str,
     hashed_password: str
 ):
+    # Apply same truncation during verification
+    plain_password = plain_password[:72]
     return pwd_context.verify(
         plain_password,
         hashed_password
