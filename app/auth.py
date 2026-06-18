@@ -8,7 +8,9 @@ load_dotenv()
 
 pwd_context = CryptContext(
     schemes=["bcrypt"],
-    deprecated="auto"
+    deprecated="auto",
+    bcrypt__rounds=12,
+    bcrypt__ident="2b"
 )
 
 SECRET_KEY = os.getenv("JWT_SECRETKEY")
