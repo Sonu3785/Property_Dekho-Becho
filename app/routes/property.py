@@ -5,6 +5,31 @@ from app import schemas, auth
 router = APIRouter(prefix="/properties", tags=["Properties"])
 
 
+@router.get("/all")
+def get_all_properties():
+    """Public endpoint — ALL properties for tenant browsing. No auth needed."""
+    try:
+        response = supabase.table("properties").select("*").execute()
+        return response.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/")
+def get_my_properties(owner_id: int = Depends(auth.get_current_user_id)):
+    """Owner: return only their own properties."""
+    try:
+        response = (
+            supabase.table("properties")
+            .select("*")
+            .eq("owner_id", owner_id)
+            .execute()
+        )
+        return response.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/")
 def create_property(
     prop: schemas.PropertyCreate,
@@ -17,7 +42,7 @@ def create_property(
                 "title":    prop.title,
                 "location": prop.location,
                 "price":    prop.price,
-                "owner_id": owner_id          # always use token — ignore client value
+                "owner_id": owner_id
             })
             .execute()
         )
@@ -26,36 +51,22 @@ def create_property(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/")
-def get_properties(owner_id: int = Depends(auth.get_current_user_id)):
-    """Return only THIS owner's properties."""
-    response = (
-        supabase.table("properties")
-        .select("*")
-        .eq("owner_id", owner_id)
-        .execute()
-    )
-    return response.data
-
-
-@router.get("/all")
-def get_all_properties():
-    """Public endpoint — all properties (for tenant browsing)."""
-    response = supabase.table("properties").select("*").execute()
-    return response.data
-
-
 @router.get("/{property_id}")
 def get_property(property_id: int):
-    response = (
-        supabase.table("properties")
-        .select("*")
-        .eq("id", property_id)
-        .execute()
-    )
-    if not response.data:
-        raise HTTPException(status_code=404, detail="Property not found")
-    return response.data[0]
+    try:
+        response = (
+            supabase.table("properties")
+            .select("*")
+            .eq("id", property_id)
+            .execute()
+        )
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Property not found")
+        return response.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/{property_id}")
@@ -63,7 +74,6 @@ def delete_property(
     property_id: int,
     owner_id: int = Depends(auth.get_current_user_id)
 ):
-    # Only delete if the property belongs to this owner
     check = (
         supabase.table("properties")
         .select("id")
