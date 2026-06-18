@@ -23,12 +23,12 @@ export default function TenantDashboard() {
   const fetchAll = async () => {
     setLoading(true)
     try {
-      const [p, pay] = await Promise.all([
+      const [p, pay] = await Promise.allSettled([
         API.get('/properties/'),
         API.get('/payments/'),
       ])
-      setProperties(Array.isArray(p.data) ? p.data : [])
-      setPayments(Array.isArray(pay.data) ? pay.data : [])
+      setProperties(p.status === 'fulfilled' && Array.isArray(p.value.data) ? p.value.data : [])
+      setPayments(pay.status === 'fulfilled' && Array.isArray(pay.value.data) ? pay.value.data : [])
     } catch { toast.error('Failed to load data') }
     finally { setLoading(false) }
   }

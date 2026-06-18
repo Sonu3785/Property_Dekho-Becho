@@ -8,10 +8,7 @@ router = APIRouter(
 )
 
 @router.post("/")
-def create_agreement(
-    agreement: schemas.AgreementCreate
-):
-
+def create_agreement(agreement: schemas.AgreementCreate):
     response = (
         supabase
         .table("agreements")
@@ -25,5 +22,15 @@ def create_agreement(
         })
         .execute()
     )
+    return response.data
 
+
+@router.get("/")
+def get_agreements():
+    response = (
+        supabase
+        .table("agreements")
+        .select("*")
+        .execute()
+    )
     return response.data

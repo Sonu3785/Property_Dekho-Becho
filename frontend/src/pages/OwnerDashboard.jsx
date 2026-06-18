@@ -26,14 +26,14 @@ export default function OwnerDashboard() {
   const fetchAll = async () => {
     setLoading(true)
     try {
-      const [p, t, pay] = await Promise.all([
+      const [p, t, pay] = await Promise.allSettled([
         API.get('/properties/'),
         API.get('/tenants/'),
         API.get('/payments/'),
       ])
-      setProperties(Array.isArray(p.data) ? p.data : [])
-      setTenants(Array.isArray(t.data) ? t.data : [])
-      setPayments(Array.isArray(pay.data) ? pay.data : [])
+      setProperties(p.status === 'fulfilled' && Array.isArray(p.value.data) ? p.value.data : [])
+      setTenants(t.status === 'fulfilled' && Array.isArray(t.value.data) ? t.value.data : [])
+      setPayments(pay.status === 'fulfilled' && Array.isArray(pay.value.data) ? pay.value.data : [])
     } catch (e) { toast.error('Failed to load data') }
     finally { setLoading(false) }
   }

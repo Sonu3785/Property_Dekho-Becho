@@ -7,24 +7,29 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(null)
 
   useEffect(() => {
-    const savedToken = localStorage.getItem('token')
-    const savedUser = localStorage.getItem('user')
+    const savedToken = localStorage.getItem('pd_token')
+    const savedUser = localStorage.getItem('pd_user')
     if (savedToken && savedUser) {
-      setToken(savedToken)
-      setUser(JSON.parse(savedUser))
+      try {
+        setToken(savedToken)
+        setUser(JSON.parse(savedUser))
+      } catch {
+        localStorage.removeItem('pd_token')
+        localStorage.removeItem('pd_user')
+      }
     }
   }, [])
 
   const login = (tokenValue, userData) => {
-    localStorage.setItem('token', tokenValue)
-    localStorage.setItem('user', JSON.stringify(userData))
+    localStorage.setItem('pd_token', tokenValue)
+    localStorage.setItem('pd_user', JSON.stringify(userData))
     setToken(tokenValue)
     setUser(userData)
   }
 
   const logout = () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
+    localStorage.removeItem('pd_token')
+    localStorage.removeItem('pd_user')
     setToken(null)
     setUser(null)
   }

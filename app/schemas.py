@@ -38,7 +38,7 @@ class PropertyBase(BaseModel):
 
 
 class PropertyCreate(PropertyBase):
-    pass
+    owner_id: int = 1
 
 
 class PropertyResponse(PropertyBase):
