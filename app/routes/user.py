@@ -11,31 +11,19 @@ router = APIRouter(
 
 @router.post("/register")
 def register(user: schemas.UserCreate):
-
     try:
-        print("Checking existing user...")
-
         existing = (
             supabase
             .table("users")
-            .select("*")
+            .select("id")
             .eq("email", user.email)
             .execute()
         )
 
-        print("Existing User Response:", existing.data)
-
         if existing.data:
-            raise HTTPException(
-                status_code=400,
-                detail="Email already registered"
-            )
-
-        print("Hashing password...")
+            raise HTTPException(status_code=400, detail="Email already registered")
 
         hashed_password = auth.hash_password(user.password)
-
-        print("Inserting user...")
 
         response = (
             supabase
@@ -48,24 +36,20 @@ def register(user: schemas.UserCreate):
             .execute()
         )
 
-        print("Insert Response:", response.data)
-
         return {
             "message": "User registered successfully",
             "data": response.data
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         print("REGISTER ERROR:", str(e))
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/login")
 def login(user: schemas.UserLogin):
-
     try:
         response = (
             supabase
@@ -75,28 +59,15 @@ def login(user: schemas.UserLogin):
             .execute()
         )
 
-        print("LOGIN RESPONSE:", response.data)
-
         if not response.data:
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid credentials"
-            )
+            raise HTTPException(status_code=401, detail="Invalid credentials")
 
         db_user = response.data[0]
 
-        if not auth.verify_password(
-            user.password,
-            db_user["password"]
-        ):
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid credentials"
-            )
+        if not auth.verify_password(user.password, db_user["password"]):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
 
-        token = auth.create_access_token(
-            {"user_id": db_user["id"]}
-        )
+        token = auth.create_access_token({"user_id": db_user["id"]})
 
         return {
             "access_token": token,
@@ -108,12 +79,11 @@ def login(user: schemas.UserLogin):
             }
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         print("LOGIN ERROR:", str(e))
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        raise HTTPException(status_code=500, detail=str(e))
         
 @router.get("/show")
 def get_users():

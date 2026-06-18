@@ -36,10 +36,11 @@ export default function Login() {
         toast.success(`Welcome back! 👋`)
         navigate(role === 'owner' ? '/owner' : '/tenant')
       } else {
-        toast.error(res.data.error || 'Login failed')
+        toast.error(String(res.data.error || 'Invalid credentials'))
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Login failed')
+      const msg = err.response?.data?.detail
+      toast.error(typeof msg === 'string' ? msg : 'Login failed. Check your credentials.')
     } finally {
       setLoading(false)
     }

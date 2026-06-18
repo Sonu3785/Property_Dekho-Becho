@@ -42,27 +42,34 @@ export default function Signup() {
         password: form.password
       })
 
-      if (res.data.data || res.data.message) {
-        // Auto login after register
-        const loginRes = await API.post('/users/login', {
+      // Check for error in response
+      if (res.data.error) {
+        toast.error(String(res.data.error))
+        setLoading(false)
+        return
+      }
+
+      // Registration successful — now login
+      const loginRes = await API.post('/users/login', {
+        email: form.email,
+        password: form.password
+      })
+
+      if (loginRes.data.access_token) {
+        login(loginRes.data.access_token, {
+          id: loginRes.data.user?.id,
           email: form.email,
-          password: form.password
+          role: role,
+          name: form.name
         })
-        if (loginRes.data.access_token) {
-          login(loginRes.data.access_token, {
-            id: loginRes.data.user?.id,
-            email: form.email,
-            role: role,
-            name: form.name
-          })
-          toast.success(`Account created! Welcome ${form.name} 🎉`)
-          navigate(role === 'owner' ? '/owner' : '/tenant')
-        }
+        toast.success(`Welcome ${form.name}! 🎉`)
+        navigate(role === 'owner' ? '/owner' : '/tenant')
       } else {
-        toast.error(res.data.error || 'Registration failed')
+        toast.error(String(loginRes.data.error || 'Login after signup failed'))
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Registration failed')
+      const msg = err.response?.data?.detail
+      toast.error(typeof msg === 'string' ? msg : 'Registration failed. Try again.')
     } finally {
       setLoading(false)
     }
