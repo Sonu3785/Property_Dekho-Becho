@@ -29,12 +29,16 @@ def register(user: schemas.UserCreate):
         # If registering as tenant → auto-create tenant record
         if user.role == "tenant" and new_user:
             try:
-                supabase.table("tenants").insert({
-                    "name":  user.name,
-                    "email": user.email,
-                    "phone": user.phone or "",
-                    "property_id": 0   # placeholder — updated when they apply for a property
-                }).execute()
+                # Check if tenant record already exists
+                existing_tenant = supabase.table("tenants").select("id").eq("email", user.email).execute()
+                if not existing_tenant.data:
+                    supabase.table("tenants").insert({
+                        "name":        user.name,
+                        "email":       user.email,
+                        "phone":       user.phone or "",
+                        "property_id": None   # NULL — updated when they apply for a property
+                    }).execute()
+                    print(f"Auto-created tenant record for {user.email}")
             except Exception as te:
                 print("Auto-tenant insert warning:", str(te))
 

@@ -8,7 +8,6 @@ import styles from './Auth.module.css'
 export default function Login() {
   const navigate = useNavigate()
   const { login } = useAuth()
-  const [role, setRole] = useState('owner')
   const [form, setForm] = useState({ email: '', password: '' })
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -27,15 +26,17 @@ export default function Login() {
       })
 
       if (res.data.access_token) {
+        const userRole = res.data.user?.role || 'owner'
         login(res.data.access_token, {
           id:    res.data.user?.id,
           email: form.email,
-          role:  res.data.user?.role || role,   // prefer backend role
+          role:  userRole,
           name:  res.data.user?.name || form.email.split('@')[0],
           phone: res.data.user?.phone || ''
         })
-        toast.success(`Welcome back! 👋`)
-        navigate(res.data.user?.role === 'tenant' ? '/tenant' : '/owner')
+        toast.success(`Welcome back, ${res.data.user?.name}! 👋`)
+        // Redirect based on role from DB — not from toggle
+        navigate(userRole === 'tenant' ? '/tenant' : '/owner')
       } else {
         toast.error(String(res.data.error || 'Invalid credentials'))
       }
@@ -70,31 +71,12 @@ export default function Login() {
         <div className={styles.formCard}>
           <div className={styles.formHeader}>
             <h1>Welcome back</h1>
-            <p>Sign in to your account</p>
+            <p>Sign in — your role is detected automatically</p>
           </div>
 
-          {/* Role Toggle */}
-          <div className={styles.roleToggle}>
-            <button
-              className={role === 'owner' ? styles.roleActiveBtn : styles.roleInactiveBtn}
-              onClick={() => setRole('owner')}
-              type="button"
-            >
-              👤 Owner
-            </button>
-            <button
-              className={role === 'tenant' ? styles.roleActiveBtn : styles.roleInactiveBtn}
-              onClick={() => setRole('tenant')}
-              type="button"
-            >
-              🏠 Tenant
-            </button>
-          </div>
-
-          <div className={styles.roleInfo}>
-            {role === 'owner'
-              ? '🏢 Signing in as a Property Owner'
-              : '🏡 Signing in as a Tenant'}
+          {/* Info banner */}
+          <div className={styles.roleInfo} style={{ marginBottom: '1.2rem' }}>
+            🔐 Owner or Tenant — just enter your credentials and we'll take you to the right place
           </div>
 
           <form onSubmit={handleSubmit} className={styles.form}>
@@ -108,6 +90,7 @@ export default function Login() {
                   value={form.email}
                   onChange={e => setForm({ ...form, email: e.target.value })}
                   required
+                  autoComplete="email"
                 />
               </div>
             </div>
@@ -122,6 +105,7 @@ export default function Login() {
                   value={form.password}
                   onChange={e => setForm({ ...form, password: e.target.value })}
                   required
+                  autoComplete="current-password"
                 />
                 <button
                   type="button"
@@ -134,15 +118,30 @@ export default function Login() {
             </div>
 
             <button type="submit" className={styles.submitBtn} disabled={loading}>
-              {loading ? <span className={styles.spinner}></span> : `Sign In as ${role === 'owner' ? 'Owner' : 'Tenant'}`}
+              {loading ? <span className={styles.spinner}></span> : 'Sign In →'}
             </button>
           </form>
 
+          <div className={styles.roleCards}>
+            <div className={styles.roleHint}>
+              <span>👤</span>
+              <div>
+                <strong>Owner?</strong>
+                <p>Manage properties & tenants</p>
+              </div>
+            </div>
+            <div className={styles.roleHint}>
+              <span>🏠</span>
+              <div>
+                <strong>Tenant?</strong>
+                <p>Browse & apply for rent</p>
+              </div>
+            </div>
+          </div>
+
           <p className={styles.switchText}>
             Don't have an account?{' '}
-            <Link to={`/signup?role=${role}`} className={styles.switchLink}>
-              Create one
-            </Link>
+            <Link to="/signup" className={styles.switchLink}>Create one</Link>
           </p>
         </div>
       </div>
