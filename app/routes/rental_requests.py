@@ -31,16 +31,23 @@ def create_request(
         tenant_rec = supabase.table("tenants").select("*").eq("email", u["email"]).execute()
         if tenant_rec.data:
             tenant_id = tenant_rec.data[0]["id"]
+            # Update phone
             if req.phone:
-                supabase.table("tenants").update({"phone": req.phone}).eq("id", tenant_id).execute()
+                supabase.table("tenants").update({
+                    "phone": req.phone,
+                    "property_id": req.property_id
+                }).eq("id", tenant_id).execute()
         else:
-            new_t = supabase.table("tenants").insert({
-                "name":        u["name"],
-                "email":       u["email"],
-                "phone":       req.phone,
-                "property_id": req.property_id
-            }).execute()
-            tenant_id = new_t.data[0]["id"]
+            try:
+                new_t = supabase.table("tenants").insert({
+                    "name":        u["name"],
+                    "email":       u["email"],
+                    "phone":       req.phone,
+                    "property_id": req.property_id
+                }).execute()
+                tenant_id = new_t.data[0]["id"]
+            except Exception as te:
+                raise HTTPException(status_code=500, detail=f"Tenant create error: {str(te)}")
 
         # Check for duplicate
         existing = (

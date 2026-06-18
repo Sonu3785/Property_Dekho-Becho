@@ -280,8 +280,13 @@ function CartPage({ cart, removeFromCart, updateCartItem, saveCart, user, refres
       removeFromCart(item.property.id)
       refresh()
     } catch (err) {
-      const msg = err.response?.data?.detail
-      toast.error(typeof msg === 'string' ? msg : 'Failed to submit request')
+      const detail = err.response?.data?.detail
+      let msg = 'Failed to submit request'
+      if (typeof detail === 'string') msg = detail
+      else if (Array.isArray(detail)) msg = detail[0]?.msg || JSON.stringify(detail)
+      else if (detail) msg = JSON.stringify(detail)
+      console.error('Request error:', err.response?.data)
+      toast.error(msg)
     } finally {
       setSubmitting(s => ({ ...s, [item.property.id]: false }))
     }
