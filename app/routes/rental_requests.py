@@ -155,12 +155,17 @@ def get_incoming_requests(owner_id: int = Depends(auth.get_current_user_id)):
             .in_("property_id", prop_ids)
             .execute()
         )
-        print(f"Requests found: {requests.data}")
 
         result = []
         for r in requests.data:
+            # Get tenant info — try by tenant_id first, fallback to phone match
             tenant = supabase.table("tenants").select("*").eq("id", r["tenant_id"]).execute()
             t = tenant.data[0] if tenant.data else {}
+            # If tenant name missing, try to get from users by phone
+            if not t.get("name") and r.get("phone"):
+                user_by_phone = supabase.table("users").select("name,email,phone").eq("phone", r["phone"]).execute()
+                if user_by_phone.data:
+                    t = {**t, "name": user_by_phone.data[0].get("name", ""), "email": user_by_phone.data[0].get("email", "")}
             prop = supabase.table("properties").select("*").eq("id", r["property_id"]).execute()
             p = prop.data[0] if prop.data else {}
             result.append({**r, "tenant": t, "property": p})
