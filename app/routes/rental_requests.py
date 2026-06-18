@@ -139,26 +139,30 @@ def get_my_requests(user_id: int = Depends(auth.get_current_user_id)):
 # ── OWNER: Get all requests for my properties ─────────────────────
 @router.get("/incoming")
 def get_incoming_requests(owner_id: int = Depends(auth.get_current_user_id)):
-    props = supabase.table("properties").select("id").eq("owner_id", owner_id).execute()
-    prop_ids = [p["id"] for p in props.data]
-    if not prop_ids:
-        return []
+    try:
+        props = supabase.table("properties").select("id").eq("owner_id", owner_id).execute()
+        prop_ids = [p["id"] for p in props.data]
+        if not prop_ids:
+            return []
 
-    requests = (
-        supabase.table("rental_requests")
-        .select("*")
-        .in_("property_id", prop_ids)
-        .execute()
-    )
+        requests = (
+            supabase.table("rental_requests")
+            .select("*")
+            .in_("property_id", prop_ids)
+            .execute()
+        )
 
-    result = []
-    for r in requests.data:
-        tenant = supabase.table("tenants").select("*").eq("id", r["tenant_id"]).execute()
-        t = tenant.data[0] if tenant.data else {}
-        prop = supabase.table("properties").select("*").eq("id", r["property_id"]).execute()
-        p = prop.data[0] if prop.data else {}
-        result.append({**r, "tenant": t, "property": p})
-    return result
+        result = []
+        for r in requests.data:
+            tenant = supabase.table("tenants").select("*").eq("id", r["tenant_id"]).execute()
+            t = tenant.data[0] if tenant.data else {}
+            prop = supabase.table("properties").select("*").eq("id", r["property_id"]).execute()
+            p = prop.data[0] if prop.data else {}
+            result.append({**r, "tenant": t, "property": p})
+        return result
+    except Exception as e:
+        print("INCOMING REQUESTS ERROR:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── OWNER: Accept a request → creates agreement ───────────────────
