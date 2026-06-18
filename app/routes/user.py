@@ -100,7 +100,12 @@ def login(user: schemas.UserLogin):
 
         return {
             "access_token": token,
-            "token_type": "bearer"
+            "token_type": "bearer",
+            "user": {
+                "id": db_user["id"],
+                "name": db_user["name"],
+                "email": db_user["email"]
+            }
         }
 
     except Exception as e:

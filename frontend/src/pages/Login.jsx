@@ -28,9 +28,10 @@ export default function Login() {
 
       if (res.data.access_token) {
         login(res.data.access_token, {
+          id: res.data.user?.id,
           email: form.email,
           role: role,
-          name: form.email.split('@')[0]
+          name: res.data.user?.name || form.email.split('@')[0]
         })
         toast.success(`Welcome back! 👋`)
         navigate(role === 'owner' ? '/owner' : '/tenant')

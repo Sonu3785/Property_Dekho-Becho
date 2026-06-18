@@ -50,6 +50,7 @@ export default function Signup() {
         })
         if (loginRes.data.access_token) {
           login(loginRes.data.access_token, {
+            id: loginRes.data.user?.id,
             email: form.email,
             role: role,
             name: form.name
