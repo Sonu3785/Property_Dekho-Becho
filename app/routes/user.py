@@ -99,3 +99,21 @@ def get_me(user_id: int = Depends(auth.get_current_user_id)):
 @router.get("/show")
 def get_users():
     return supabase.table("users").select("id,name,email,role").execute().data
+
+
+@router.get("/all-tenants")
+def get_all_tenants():
+    """Public debug — get all tenants."""
+    return supabase.table("tenants").select("*").execute().data
+
+
+@router.get("/all-properties")
+def get_all_properties_admin():
+    """Public debug — get all properties."""
+    return supabase.table("properties").select("*").execute().data
+
+
+@router.get("/all-agreements")
+def get_all_agreements_admin():
+    """Public debug — get all agreements."""
+    return supabase.table("agreements").select("*").execute().data
