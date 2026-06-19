@@ -24,16 +24,17 @@ export default function TenantDashboard() {
   const [myRequests, setMyRequests] = useState([])
   const [cart, setCart]             = useState([])           // [{property, startDate, endDate, phone}]
   const [loading, setLoading]       = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
-    fetchAll()
-    // Load cart from localStorage
+    fetchAll(true)
     const saved = localStorage.getItem('pd_cart')
     if (saved) try { setCart(JSON.parse(saved)) } catch {}
   }, [])
 
-  const fetchAll = async () => {
-    setLoading(true)
+  const fetchAll = async (initial = false) => {
+    if (initial) setLoading(true)
+    else setRefreshing(true)
     const [p, pay, ag, reqs] = await Promise.allSettled([
       API.get('/properties/all'),
       API.get('/payments/my'),
@@ -45,6 +46,7 @@ export default function TenantDashboard() {
     setAgreements(ag.status   === 'fulfilled' && Array.isArray(ag.value.data)   ? ag.value.data   : [])
     setMyRequests(reqs.status === 'fulfilled' && Array.isArray(reqs.value.data) ? reqs.value.data : [])
     setLoading(false)
+    setRefreshing(false)
   }
 
   const saveCart = (items) => {
@@ -84,6 +86,7 @@ export default function TenantDashboard() {
     <div className={styles.dashboard}>
       <Navbar activeTab={activeTab} setActiveTab={setActiveTab} tabs={tabsWithBadge} />
       <div className={styles.content}>
+        {refreshing && <div className={styles.refreshBar}><span className={styles.spin} /> Refreshing…</div>}
         {loading
           ? <div className={styles.loader}><span className={styles.spin} /></div>
           : <>

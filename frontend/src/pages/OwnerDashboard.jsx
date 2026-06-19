@@ -23,11 +23,13 @@ export default function OwnerDashboard() {
   const [agreements, setAgreements] = useState([])
   const [requests, setRequests]     = useState([])
   const [loading, setLoading]       = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
-  useEffect(() => { fetchAll() }, [])
+  useEffect(() => { fetchAll(true) }, [])
 
-  const fetchAll = async () => {
-    setLoading(true)
+  const fetchAll = async (initial = false) => {
+    if (initial) setLoading(true)
+    else setRefreshing(true)
     const [p, t, pay, ag, req] = await Promise.allSettled([
       API.get('/properties/'),
       API.get('/tenants/'),
@@ -41,6 +43,7 @@ export default function OwnerDashboard() {
     setAgreements(ag.status  === 'fulfilled' && Array.isArray(ag.value.data)  ? ag.value.data  : [])
     setRequests(  req.status === 'fulfilled' && Array.isArray(req.value.data) ? req.value.data : [])
     setLoading(false)
+    setRefreshing(false)
   }
 
   const pendingCount = requests.filter(r => r.status === 'pending').length
@@ -56,6 +59,7 @@ export default function OwnerDashboard() {
     <div className={styles.dashboard}>
       <Navbar activeTab={activeTab} setActiveTab={setActiveTab} tabs={tabsWithBadge} />
       <div className={styles.content}>
+        {refreshing && <div className={styles.refreshBar}><span className={styles.spin} /> Refreshing…</div>}
         {loading
           ? <div className={styles.loader}><span className={styles.spin} /></div>
           : <>

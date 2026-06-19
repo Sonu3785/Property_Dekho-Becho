@@ -536,3 +536,23 @@
   text-align: right;
 }
 .ownerContact p { margin: 0.2rem 0; }
+
+/* Refresh indicator */
+.refreshBar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #ede9fe;
+  color: #4f46e5;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.4rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  width: fit-content;
+}
+.refreshBar .spin {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
