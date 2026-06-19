@@ -556,3 +556,37 @@
   height: 14px;
   border-width: 2px;
 }
+
+/* Archive / Unarchive buttons */
+.archiveBtn {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  padding: 0.2rem;
+}
+.archiveBtn:hover { opacity: 1; }
+
+.unarchiveBtn {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  padding: 0.2rem;
+}
+.unarchiveBtn:hover { opacity: 1; }
+
+.archivedBadge {
+  display: inline-block;
+  background: #f1f5f9;
+  color: #64748b;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-top: 0.4rem;
+}

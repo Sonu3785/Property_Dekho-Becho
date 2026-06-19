@@ -7,9 +7,14 @@ router = APIRouter(prefix="/properties", tags=["Properties"])
 
 @router.get("/all")
 def get_all_properties():
-    """Public endpoint — ALL properties for tenant browsing. No auth needed."""
+    """Public endpoint — ALL available properties for tenant browsing."""
     try:
-        response = supabase.table("properties").select("*").execute()
+        response = (
+            supabase.table("properties")
+            .select("*")
+            .eq("status", "available")
+            .execute()
+        )
         return response.data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -17,7 +22,7 @@ def get_all_properties():
 
 @router.get("/")
 def get_my_properties(owner_id: int = Depends(auth.get_current_user_id)):
-    """Owner: return only their own properties."""
+    """Owner: return all their properties with status."""
     try:
         response = (
             supabase.table("properties")
@@ -28,6 +33,32 @@ def get_my_properties(owner_id: int = Depends(auth.get_current_user_id)):
         return response.data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/{property_id}/archive")
+def archive_property(
+    property_id: int,
+    owner_id: int = Depends(auth.get_current_user_id)
+):
+    """Owner manually archives a property."""
+    check = supabase.table("properties").select("id").eq("id", property_id).eq("owner_id", owner_id).execute()
+    if not check.data:
+        raise HTTPException(status_code=403, detail="Not your property")
+    supabase.table("properties").update({"status": "archived"}).eq("id", property_id).execute()
+    return {"success": True, "message": "Property archived"}
+
+
+@router.patch("/{property_id}/unarchive")
+def unarchive_property(
+    property_id: int,
+    owner_id: int = Depends(auth.get_current_user_id)
+):
+    """Owner manually unarchives a property."""
+    check = supabase.table("properties").select("id").eq("id", property_id).eq("owner_id", owner_id).execute()
+    if not check.data:
+        raise HTTPException(status_code=403, detail="Not your property")
+    supabase.table("properties").update({"status": "available"}).eq("id", property_id).execute()
+    return {"success": True, "message": "Property is available again"}
 
 
 @router.post("/")

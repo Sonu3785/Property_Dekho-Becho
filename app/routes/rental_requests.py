@@ -196,6 +196,9 @@ def accept_request(
     # Update request status to accepted
     supabase.table("rental_requests").update({"status": "accepted"}).eq("id", request_id).execute()
 
+    # Auto-archive the property — it's now occupied
+    supabase.table("properties").update({"status": "archived"}).eq("id", r["property_id"]).execute()
+
     # Create agreement with pending_approval status
     agreement = supabase.table("agreements").insert({
         "tenant_id":       r["tenant_id"],

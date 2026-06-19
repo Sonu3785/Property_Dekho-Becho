@@ -173,10 +173,14 @@ function Properties({ properties, user, refresh }) {
   const [sortBy, setSortBy]     = useState('title')
   const [sortDir, setSortDir]   = useState('asc')
   const [showForm, setShowForm] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
   const [form, setForm]         = useState({ title: '', location: '', price: '' })
   const [saving, setSaving]     = useState(false)
 
-  const filtered = properties
+  const available = properties.filter(p => (p.status || 'available') === 'available')
+  const archived  = properties.filter(p => p.status === 'archived')
+
+  const filtered = available
     .filter(p => p.title?.toLowerCase().includes(search.toLowerCase()) || p.location?.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
       let av = a[sortBy], bv = b[sortBy]
@@ -184,9 +188,11 @@ function Properties({ properties, user, refresh }) {
       return sortDir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1)
     })
 
+  const filteredArchived = archived
+    .filter(p => p.title?.toLowerCase().includes(search.toLowerCase()) || p.location?.toLowerCase().includes(search.toLowerCase()))
+
   const handleAdd = async (e) => {
-    e.preventDefault()
-    setSaving(true)
+    e.preventDefault(); setSaving(true)
     try {
       await API.post('/properties/', { title: form.title, location: form.location, price: parseFloat(form.price), owner_id: user?.id || 1 })
       toast.success('Property added! 🏢')
@@ -196,15 +202,32 @@ function Properties({ properties, user, refresh }) {
   }
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this property?')) return
-    try { await API.delete(`/properties/${id}`); toast.success('Deleted'); refresh() }
+    if (!window.confirm('Permanently delete this property? This cannot be undone.')) return
+    try { await API.delete(`/properties/${id}`); toast.success('Property deleted'); refresh() }
     catch { toast.error('Failed to delete') }
+  }
+
+  const handleArchive = async (id) => {
+    try {
+      await API.patch(`/properties/${id}/archive`)
+      toast.success('Property archived 🗄️'); refresh()
+    } catch { toast.error('Failed to archive') }
+  }
+
+  const handleUnarchive = async (id) => {
+    try {
+      await API.patch(`/properties/${id}/unarchive`)
+      toast.success('Property available again ✅'); refresh()
+    } catch { toast.error('Failed to unarchive') }
   }
 
   return (
     <div>
       <div className={styles.pageHeader}>
-        <div><h2>My Properties</h2><p className={styles.subtitle}>{properties.length} properties listed</p></div>
+        <div>
+          <h2>My Properties</h2>
+          <p className={styles.subtitle}>{available.length} available · {archived.length} archived</p>
+        </div>
         <button className={styles.addBtn} onClick={() => setShowForm(v => !v)}>{showForm ? '✕ Cancel' : '+ Add Property'}</button>
       </div>
 
@@ -212,9 +235,9 @@ function Properties({ properties, user, refresh }) {
         <div className={styles.formBox}>
           <h3>📋 Add New Property</h3>
           <form onSubmit={handleAdd} className={styles.inlineForm}>
-            <input placeholder="Title (e.g. 2BHK Flat Kothrud)"  value={form.title}    onChange={e => setForm({ ...form, title: e.target.value })} required />
-            <input placeholder="Location (e.g. Pune, Maharashtra)" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} required />
-            <input type="number" placeholder="Rent per month (₹)"  value={form.price}    onChange={e => setForm({ ...form, price: e.target.value })} required min="0" />
+            <input placeholder="Title (e.g. 2BHK Flat Kothrud)"   value={form.title}    onChange={e => setForm({...form, title: e.target.value})} required />
+            <input placeholder="Location (e.g. Pune, Maharashtra)" value={form.location} onChange={e => setForm({...form, location: e.target.value})} required />
+            <input type="number" placeholder="Rent per month (₹)"  value={form.price}    onChange={e => setForm({...form, price: e.target.value})} required min="0" />
             <button type="submit" className={styles.saveBtn} disabled={saving}>{saving ? 'Saving...' : '✓ Add Property'}</button>
           </form>
         </div>
@@ -232,10 +255,59 @@ function Properties({ properties, user, refresh }) {
         </button>
       </div>
 
+      {/* Available Properties */}
+      <h3 className={styles.sectionHeading}>✅ Available ({filtered.length})</h3>
       {filtered.length === 0
-        ? <div className={styles.emptyState}><div className={styles.emptyIcon}>🏢</div><p>No properties found. {search ? 'Try a different search.' : 'Click "+ Add Property" to get started!'}</p></div>
-        : <div className={styles.cardGrid}>{filtered.map(p => <PropCard key={p.id} p={p} onDelete={handleDelete} />)}</div>
+        ? <div className={styles.emptyState}><div className={styles.emptyIcon}>🏢</div><p>{search ? 'No results.' : 'No available properties. Add one!'}</p></div>
+        : <div className={styles.cardGrid}>
+            {filtered.map(p => (
+              <div key={p.id} className={styles.propCard}>
+                <div className={styles.propCardHeader}>
+                  <span className={styles.propIcon}>🏢</span>
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    <button className={styles.archiveBtn} onClick={() => handleArchive(p.id)} title="Archive property">🗄️</button>
+                    <button className={styles.deleteBtn} onClick={() => handleDelete(p.id)} title="Delete permanently">🗑️</button>
+                  </div>
+                </div>
+                <h4>{p.title}</h4>
+                <p className={styles.propLocation}>📍 {p.location}</p>
+                <div className={styles.propPrice}>₹{p.price?.toLocaleString()}<span>/month</span></div>
+                <span className={styles.availBadge}>Available</span>
+              </div>
+            ))}
+          </div>
       }
+
+      {/* Archived Properties */}
+      {archived.length > 0 && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', margin: '2rem 0 1rem' }}>
+            <h3 className={styles.sectionHeading} style={{ margin: 0 }}>🗄️ Archived / Occupied ({archived.length})</h3>
+            <button className={styles.sortBtn} onClick={() => setShowArchived(v => !v)}>
+              {showArchived ? '▲ Hide' : '▼ Show'}
+            </button>
+          </div>
+          {showArchived && (
+            <div className={styles.cardGrid}>
+              {filteredArchived.map(p => (
+                <div key={p.id} className={styles.propCard} style={{ opacity: 0.7, borderStyle: 'dashed' }}>
+                  <div className={styles.propCardHeader}>
+                    <span className={styles.propIcon}>🗄️</span>
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      <button className={styles.unarchiveBtn} onClick={() => handleUnarchive(p.id)} title="Make available again">↩️</button>
+                      <button className={styles.deleteBtn} onClick={() => handleDelete(p.id)} title="Delete permanently">🗑️</button>
+                    </div>
+                  </div>
+                  <h4>{p.title}</h4>
+                  <p className={styles.propLocation}>📍 {p.location}</p>
+                  <div className={styles.propPrice}>₹{p.price?.toLocaleString()}<span>/month</span></div>
+                  <span className={styles.archivedBadge}>Occupied / Archived</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
@@ -291,15 +363,34 @@ function Tenants({ tenants, properties, refresh }) {
       </div>
       <div className={styles.tableWrapper}>
         <table className={styles.table}>
-          <thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Property</th></tr></thead>
+          <thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Property</th><th>Action</th></tr></thead>
           <tbody>
             {filtered.map(t => {
               const prop = properties.find(p => p.id === t.property_id)
               return (
                 <tr key={t.id}>
                   <td><div className={styles.tenantName}><div className={styles.miniAvatar}>{t.name?.[0]?.toUpperCase()}</div>{t.name}</div></td>
-                  <td>{t.phone}</td><td>{t.email}</td>
+                  <td>{t.phone}</td>
+                  <td>{t.email}</td>
                   <td><span className={styles.badge}>{prop ? prop.title : `#${t.property_id}`}</span></td>
+                  <td>
+                    <button
+                      className={styles.rejectBtn}
+                      style={{ padding: '0.3rem 0.8rem', fontSize: '0.8rem' }}
+                      onClick={async () => {
+                        if (!window.confirm(`Remove ${t.name}? This will unarchive their property.`)) return
+                        try {
+                          await API.delete(`/tenants/${t.id}`)
+                          toast.success(`${t.name} removed. Property is available again ✅`)
+                          refresh()
+                        } catch (err) {
+                          toast.error(err.response?.data?.detail || 'Failed to remove')
+                        }
+                      }}
+                    >
+                      🚪 Remove
+                    </button>
+                  </td>
                 </tr>
               )
             })}

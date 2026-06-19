@@ -129,3 +129,35 @@ def get_my_tenant_profile(user_id: int = Depends(auth.get_current_user_id)):
     email = user.data[0]["email"]
     tenant = supabase.table("tenants").select("*").eq("email", email).execute()
     return tenant.data[0] if tenant.data else None
+
+
+@router.delete("/{tenant_id}")
+def remove_tenant(
+    tenant_id: int,
+    owner_id: int = Depends(auth.get_current_user_id)
+):
+    """Owner removes a tenant — unarchives the property automatically."""
+    # Get tenant to find their property
+    tenant = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
+    if not tenant.data:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    t = tenant.data[0]
+
+    # Verify property belongs to owner
+    if t.get("property_id"):
+        prop = supabase.table("properties").select("id").eq("id", t["property_id"]).eq("owner_id", owner_id).execute()
+        if not prop.data:
+            raise HTTPException(status_code=403, detail="Not your property")
+
+        # Cancel any active agreements for this tenant+property
+        supabase.table("agreements").update({
+            "status": "terminated"
+        }).eq("tenant_id", tenant_id).eq("property_id", t["property_id"]).execute()
+
+        # Unarchive the property — it's available again
+        supabase.table("properties").update({"status": "available"}).eq("id", t["property_id"]).execute()
+
+    # Remove tenant record
+    supabase.table("tenants").delete().eq("id", tenant_id).execute()
+
+    return {"success": True, "message": "Tenant removed and property is now available again"}
