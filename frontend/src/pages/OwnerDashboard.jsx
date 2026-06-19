@@ -402,12 +402,6 @@ function Tenants({ tenants, properties, refresh }) {
   )
 }
 
-/* ── AGREEMENTS ───────────────────────────────────────────────── */
-// Note: Full Agreements component with approve is defined at end of file
-function AgreementsLegacy({ properties, tenants, agreements, refresh }) {
-  return null // replaced by full Agreements component below
-}
-
 /* ── PAYMENTS ─────────────────────────────────────────────────── */
 function Payments({ payments, tenants, refresh }) {
   const [statusFilter, setStatusFilter] = useState('all')

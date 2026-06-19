@@ -59,10 +59,11 @@ export default function Signup() {
 
       if (loginRes.data.access_token) {
         login(loginRes.data.access_token, {
-          id: loginRes.data.user?.id,
+          id:    loginRes.data.user?.id,
           email: form.email,
-          role: role,
-          name: form.name
+          role:  loginRes.data.user?.role || role,
+          name:  form.name,
+          phone: form.phone || ''
         })
         toast.success(`Welcome ${form.name}! 🎉`)
         navigate(role === 'owner' ? '/owner' : '/tenant')
