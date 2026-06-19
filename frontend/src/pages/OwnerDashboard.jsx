@@ -484,9 +484,9 @@ function IncomingRequests({ requests, refresh }) {
     }
   }
 
-  const pending  = requests.filter(r => r.status === 'pending')
-  const others   = requests.filter(r => r.status !== 'pending')
-  const statusColor = { pending: '#f59e0b', accepted: '#10b981', rejected: '#ef4444' }
+  const pending      = requests.filter(r => r.status === 'pending')
+  const others       = requests.filter(r => r.status !== 'pending')
+  const statusColor  = { pending: '#f59e0b', accepted: '#10b981', rejected: '#ef4444' }
 
   return (
     <div>

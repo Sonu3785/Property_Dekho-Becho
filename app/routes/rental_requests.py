@@ -141,31 +141,31 @@ def get_my_requests(user_id: int = Depends(auth.get_current_user_id)):
 def get_incoming_requests(owner_id: int = Depends(auth.get_current_user_id)):
     try:
         print(f"INCOMING REQUESTS - owner_id from token: {owner_id}")
-        
+
         props = supabase.table("properties").select("id").eq("owner_id", owner_id).execute()
-        print(f"Properties found: {props.data}")
+        print(f"Properties for owner {owner_id}: {props.data}")
         prop_ids = [p["id"] for p in props.data]
         if not prop_ids:
-            print(f"No properties for owner_id={owner_id}")
+            print(f"No properties found for owner_id={owner_id}")
             return []
 
-        requests = (
+        # Get ALL requests for these properties (all statuses)
+        all_requests = (
             supabase.table("rental_requests")
             .select("*")
             .in_("property_id", prop_ids)
             .execute()
         )
+        print(f"All requests found: {all_requests.data}")
 
         result = []
-        for r in requests.data:
-            # Get tenant info — try by tenant_id first, fallback to phone match
+        for r in all_requests.data:
             tenant = supabase.table("tenants").select("*").eq("id", r["tenant_id"]).execute()
             t = tenant.data[0] if tenant.data else {}
-            # If tenant name missing, try to get from users by phone
             if not t.get("name") and r.get("phone"):
                 user_by_phone = supabase.table("users").select("name,email,phone").eq("phone", r["phone"]).execute()
                 if user_by_phone.data:
-                    t = {**t, "name": user_by_phone.data[0].get("name", ""), "email": user_by_phone.data[0].get("email", "")}
+                    t = {**t, "name": user_by_phone.data[0].get("name",""), "email": user_by_phone.data[0].get("email","")}
             prop = supabase.table("properties").select("*").eq("id", r["property_id"]).execute()
             p = prop.data[0] if prop.data else {}
             result.append({**r, "tenant": t, "property": p})
