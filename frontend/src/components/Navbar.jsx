@@ -1,13 +1,13 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
+import NotificationBell from './NotificationBell'
 import styles from './Navbar.module.css'
 
 export default function Navbar({ activeTab, setActiveTab, tabs }) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const [menuOpen, setMenuOpen] = useState(false)
 
   const handleLogout = () => {
     logout()
@@ -32,6 +32,9 @@ export default function Navbar({ activeTab, setActiveTab, tabs }) {
         </div>
       </div>
       <div className={styles.right}>
+        {/* Live Notification Bell */}
+        <NotificationBell onNavigate={(tab) => setActiveTab(tab)} />
+
         <div className={styles.userInfo}>
           <div className={styles.avatar}>{user?.name?.[0]?.toUpperCase() || 'U'}</div>
           <div>
