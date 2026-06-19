@@ -32,17 +32,56 @@ def create_tenant(
 
 @router.get("/")
 def get_tenants(owner_id: int = Depends(auth.get_current_user_id)):
-    """Owner: get all tenants in their properties."""
-    props = (
-        supabase.table("properties")
-        .select("id")
-        .eq("owner_id", owner_id)
-        .execute()
-    )
-    prop_ids = [p["id"] for p in props.data]
-    if not prop_ids:
-        return []
-    return supabase.table("tenants").select("*").in_("property_id", prop_ids).execute().data
+    """Owner: get all tenants in their properties (by property_id OR by agreement)."""
+    try:
+        # Get owner's property IDs
+        props = (
+            supabase.table("properties")
+            .select("id")
+            .eq("owner_id", owner_id)
+            .execute()
+        )
+        prop_ids = [p["id"] for p in props.data]
+        if not prop_ids:
+            return []
+
+        # Get tenants whose property_id matches
+        by_property = (
+            supabase.table("tenants")
+            .select("*")
+            .in_("property_id", prop_ids)
+            .execute()
+        )
+
+        # Also get tenants who have agreements on owner's properties
+        agreements = (
+            supabase.table("agreements")
+            .select("tenant_id")
+            .in_("property_id", prop_ids)
+            .execute()
+        )
+        tenant_ids_from_agreements = list({a["tenant_id"] for a in agreements.data})
+
+        # Merge both sets
+        seen_ids = {t["id"] for t in by_property.data}
+        all_tenants = list(by_property.data)
+
+        if tenant_ids_from_agreements:
+            by_agreement = (
+                supabase.table("tenants")
+                .select("*")
+                .in_("id", tenant_ids_from_agreements)
+                .execute()
+            )
+            for t in by_agreement.data:
+                if t["id"] not in seen_ids:
+                    all_tenants.append(t)
+                    seen_ids.add(t["id"])
+
+        return all_tenants
+    except Exception as e:
+        print("GET TENANTS ERROR:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/{tenant_id}")

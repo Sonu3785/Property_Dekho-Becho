@@ -38,24 +38,44 @@ def create_agreement(
 
 @router.get("/")
 def get_agreements(owner_id: int = Depends(auth.get_current_user_id)):
-    """Return agreements for this owner's properties with full status."""
-    props = (
-        supabase.table("properties")
-        .select("id")
-        .eq("owner_id", owner_id)
-        .execute()
-    )
-    prop_ids = [p["id"] for p in props.data]
-    if not prop_ids:
-        return []
+    """Return agreements for this owner's properties — enriched with tenant & property names."""
+    try:
+        props = (
+            supabase.table("properties")
+            .select("id,title,location")
+            .eq("owner_id", owner_id)
+            .execute()
+        )
+        prop_ids  = [p["id"] for p in props.data]
+        prop_map  = {p["id"]: p for p in props.data}
+        if not prop_ids:
+            return []
 
-    response = (
-        supabase.table("agreements")
-        .select("*")
-        .in_("property_id", prop_ids)
-        .execute()
-    )
-    return response.data
+        agreements = (
+            supabase.table("agreements")
+            .select("*")
+            .in_("property_id", prop_ids)
+            .execute()
+        )
+
+        # Enrich each agreement with tenant name and property title
+        result = []
+        for ag in agreements.data:
+            tenant = supabase.table("tenants").select("id,name,email,phone").eq("id", ag["tenant_id"]).execute()
+            t = tenant.data[0] if tenant.data else {}
+            p = prop_map.get(ag["property_id"], {})
+            result.append({
+                **ag,
+                "tenant_name":    t.get("name", ""),
+                "tenant_email":   t.get("email", ""),
+                "tenant_phone":   t.get("phone", ""),
+                "property_title": p.get("title", ""),
+                "property_location": p.get("location", "")
+            })
+        return result
+    except Exception as e:
+        print("GET AGREEMENTS ERROR:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/my")

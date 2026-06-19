@@ -626,11 +626,15 @@ function Agreements({ properties, tenants, agreements, refresh }) {
               const t  = tenants.find(t => t.id === ag.tenant_id)
               const p  = properties.find(p => p.id === ag.property_id)
               const st = ag.status || 'active'
+              // Use enriched fields from backend if available
+              const tname  = ag.tenant_name  || t?.name  || `#${ag.tenant_id}`
+              const ptitle = ag.property_title || p?.title || `#${ag.property_id}`
+              const tletter = tname[0]?.toUpperCase() || '?'
               return (
                 <tr key={ag.id}>
                   <td>{i + 1}</td>
-                  <td><div className={styles.tenantName}><div className={styles.miniAvatar}>{t?.name?.[0]?.toUpperCase()||'?'}</div>{t?.name||`#${ag.tenant_id}`}</div></td>
-                  <td>{p?.title||`#${ag.property_id}`}</td>
+                  <td><div className={styles.tenantName}><div className={styles.miniAvatar}>{tletter}</div>{tname}</div></td>
+                  <td>{ptitle}</td>
                   <td style={{ fontSize:'0.82rem' }}>{ag.start_date} → {ag.end_date}</td>
                   <td>₹{ag.rent?.toLocaleString()}</td>
                   <td><span className={styles.statusBadge} style={{ background:(statusColor[st]||'#94a3b8')+'20', color:statusColor[st]||'#94a3b8' }}>{statusLabel[st]||st}</span></td>
