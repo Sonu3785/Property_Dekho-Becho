@@ -1,17 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.database import supabase
 from app import auth
-from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
 
 @router.get("/")
 def get_notifications(user_id: int = Depends(auth.get_current_user_id)):
-    """
-    Returns recent notifications for the logged-in user (owner or tenant).
-    Checks last 7 days of activity.
-    """
     try:
         user = supabase.table("users").select("*").eq("id", user_id).execute()
         if not user.data:
@@ -20,14 +15,14 @@ def get_notifications(user_id: int = Depends(auth.get_current_user_id)):
         role = u.get("role", "owner")
         notifications = []
 
+        # ── OWNER NOTIFICATIONS ────────────────────────────────────
         if role == "owner":
-            # Get owner's property IDs
             props = supabase.table("properties").select("id,title").eq("owner_id", user_id).execute()
-            prop_ids = [p["id"] for p in props.data]
-            prop_map = {p["id"]: p["title"] for p in props.data}
+            prop_ids  = [p["id"] for p in props.data]
+            prop_map  = {p["id"]: p["title"] for p in props.data}
 
             if prop_ids:
-                # New rental requests (pending)
+                # 1. New pending rental requests
                 requests = (
                     supabase.table("rental_requests")
                     .select("*")
@@ -37,7 +32,7 @@ def get_notifications(user_id: int = Depends(auth.get_current_user_id)):
                 )
                 for r in requests.data:
                     tenant = supabase.table("tenants").select("name,email").eq("id", r["tenant_id"]).execute()
-                    tname = tenant.data[0]["name"] if tenant.data else "A tenant"
+                    tname  = tenant.data[0]["name"] if tenant.data else "A tenant"
                     notifications.append({
                         "id":      f"req_{r['id']}",
                         "type":    "request",
@@ -49,19 +44,7 @@ def get_notifications(user_id: int = Depends(auth.get_current_user_id)):
                         "action":  "requests"
                     })
 
-                # Tenant approved agreements
-                agreements = (
-                    supabase.table("agreements")
-                    .select("*")
-                    .in_("property_id", prop_ids)
-                    .eq("tenant_approved", True)
-                    .eq("owner_approved", True)
-                    .execute()
-                )
-                for ag in agreements:
-                    pass  # already active, no notification needed
-
-                # Agreements pending owner approval
+                # 2. Agreements where tenant approved but owner hasn't yet
                 pending_approval = (
                     supabase.table("agreements")
                     .select("*")
@@ -73,25 +56,73 @@ def get_notifications(user_id: int = Depends(auth.get_current_user_id)):
                 )
                 for ag in pending_approval.data:
                     tenant = supabase.table("tenants").select("name").eq("id", ag["tenant_id"]).execute()
-                    tname = tenant.data[0]["name"] if tenant.data else "Tenant"
+                    tname  = tenant.data[0]["name"] if tenant.data else "Tenant"
                     notifications.append({
-                        "id":      f"ag_owner_{ag['id']}",
+                        "id":      f"ag_approve_{ag['id']}",
                         "type":    "agreement",
                         "icon":    "📄",
-                        "title":   "Agreement Awaiting Your Approval",
-                        "message": f"{tname} approved the agreement for {prop_map.get(ag['property_id'], 'your property')}. Please review.",
+                        "title":   "Agreement Needs Your Approval",
+                        "message": f"{tname} signed the agreement for {prop_map.get(ag['property_id'], 'your property')}. Please approve.",
                         "time":    "",
                         "read":    False,
                         "action":  "agreements"
                     })
 
+                # 3. Tenant initiated leave (vacating_pending)
+                vacating = (
+                    supabase.table("agreements")
+                    .select("*")
+                    .in_("property_id", prop_ids)
+                    .eq("status", "vacating_pending")
+                    .execute()
+                )
+                for ag in vacating.data:
+                    tenant = supabase.table("tenants").select("name").eq("id", ag["tenant_id"]).execute()
+                    tname  = tenant.data[0]["name"] if tenant.data else "Your tenant"
+                    ptitle = prop_map.get(ag["property_id"], "your property")
+                    notifications.append({
+                        "id":      f"vacate_{ag['id']}",
+                        "type":    "vacating",
+                        "icon":    "🚪",
+                        "title":   "Tenant is Leaving!",
+                        "message": f"{tname} wants to vacate {ptitle}. Confirm to make property available.",
+                        "time":    "",
+                        "read":    False,
+                        "action":  "vacating",
+                        "agreement_id": ag["id"]
+                    })
+
+                # 4. Newly active agreements
+                active_ags = (
+                    supabase.table("agreements")
+                    .select("*")
+                    .in_("property_id", prop_ids)
+                    .eq("status", "active")
+                    .eq("owner_approved", True)
+                    .eq("tenant_approved", True)
+                    .execute()
+                )
+                for ag in active_ags.data:
+                    tenant = supabase.table("tenants").select("name").eq("id", ag["tenant_id"]).execute()
+                    tname  = tenant.data[0]["name"] if tenant.data else "Tenant"
+                    notifications.append({
+                        "id":      f"active_{ag['id']}",
+                        "type":    "active",
+                        "icon":    "🎉",
+                        "title":   "Agreement Active",
+                        "message": f"{tname} — agreement for {prop_map.get(ag['property_id'], 'property')} is now fully active.",
+                        "time":    "",
+                        "read":    False,
+                        "action":  "agreements"
+                    })
+
+        # ── TENANT NOTIFICATIONS ───────────────────────────────────
         elif role == "tenant":
-            # Find tenant record
             tenant = supabase.table("tenants").select("id").eq("email", u["email"]).execute()
             if tenant.data:
                 tenant_id = tenant.data[0]["id"]
 
-                # Accepted requests
+                # 1. Accepted requests
                 accepted = (
                     supabase.table("rental_requests")
                     .select("*")
@@ -100,25 +131,23 @@ def get_notifications(user_id: int = Depends(auth.get_current_user_id)):
                     .execute()
                 )
                 for r in accepted.data:
-                    prop = supabase.table("properties").select("title").eq("id", r["property_id"]).execute()
-                    ptitle = prop.data[0]["title"] if prop.data else "property"
-                    owner = supabase.table("properties").select("owner_id").eq("id", r["property_id"]).execute()
-                    owner_info = {}
-                    if owner.data:
-                        ou = supabase.table("users").select("name,phone").eq("id", owner.data[0]["owner_id"]).execute()
-                        owner_info = ou.data[0] if ou.data else {}
+                    prop = supabase.table("properties").select("title,owner_id").eq("id", r["property_id"]).execute()
+                    p = prop.data[0] if prop.data else {}
+                    owner = supabase.table("users").select("name,phone").eq("id", p.get("owner_id", 0)).execute()
+                    o = owner.data[0] if owner.data else {}
+                    contact = f"📞 {o.get('phone','')}" if o.get("phone") else f"📧 {o.get('email','')}"
                     notifications.append({
                         "id":      f"req_acc_{r['id']}",
                         "type":    "accepted",
                         "icon":    "✅",
-                        "title":   "Rental Request Accepted!",
-                        "message": f"Owner accepted your request for {ptitle}. Contact: {owner_info.get('name','')} 📞 {owner_info.get('phone','')}",
+                        "title":   "Request Accepted!",
+                        "message": f"Owner accepted your request for {p.get('title','property')}. Owner: {o.get('name','')} {contact}",
                         "time":    r.get("created_at", ""),
                         "read":    False,
                         "action":  "requests"
                     })
 
-                # Rejected requests
+                # 2. Rejected requests
                 rejected = (
                     supabase.table("rental_requests")
                     .select("*")
@@ -140,7 +169,7 @@ def get_notifications(user_id: int = Depends(auth.get_current_user_id)):
                         "action":  "requests"
                     })
 
-                # Agreements needing tenant approval
+                # 3. Agreement needs tenant approval
                 pending = (
                     supabase.table("agreements")
                     .select("*")
@@ -154,17 +183,17 @@ def get_notifications(user_id: int = Depends(auth.get_current_user_id)):
                     prop = supabase.table("properties").select("title").eq("id", ag["property_id"]).execute()
                     ptitle = prop.data[0]["title"] if prop.data else "property"
                     notifications.append({
-                        "id":      f"ag_ten_{ag['id']}",
+                        "id":      f"ag_sign_{ag['id']}",
                         "type":    "agreement",
-                        "icon":    "📄",
-                        "title":   "Agreement Ready to Sign!",
+                        "icon":    "✍️",
+                        "title":   "Agreement Ready to Sign",
                         "message": f"Owner approved the agreement for {ptitle}. Please review and approve.",
                         "time":    "",
                         "read":    False,
                         "action":  "agreements"
                     })
 
-                # Active agreements
+                # 4. Active agreements
                 active = (
                     supabase.table("agreements")
                     .select("*")
@@ -180,7 +209,7 @@ def get_notifications(user_id: int = Depends(auth.get_current_user_id)):
                         "type":    "active",
                         "icon":    "🎉",
                         "title":   "Agreement Active!",
-                        "message": f"Your rental agreement for {ptitle} is now active.",
+                        "message": f"Your rental agreement for {ptitle} is now active. Enjoy your stay!",
                         "time":    "",
                         "read":    False,
                         "action":  "agreements"

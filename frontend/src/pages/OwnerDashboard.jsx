@@ -565,11 +565,25 @@ function IncomingRequests({ requests, refresh }) {
   )
 }
 
-/* ── AGREEMENTS (with approve) ─────────────────────────────────── */
+/* ── AGREEMENTS (with approve + vacate handling) ─────────────── */
 function Agreements({ properties, tenants, agreements, refresh }) {
-  const [approving, setApproving] = useState({})
-  const statusColor = { active: '#10b981', pending_approval: '#f59e0b', rejected: '#ef4444' }
-  const statusLabel = { active: '✅ Active', pending_approval: '⏳ Pending', rejected: '❌ Rejected' }
+  const [approving, setApproving]   = useState({})
+  const [confirming, setConfirming] = useState({})
+
+  const statusColor = {
+    active:           '#10b981',
+    pending_approval: '#f59e0b',
+    vacating_pending: '#f97316',
+    terminated:       '#94a3b8',
+    rejected:         '#ef4444'
+  }
+  const statusLabel = {
+    active:           '✅ Active',
+    pending_approval: '⏳ Pending',
+    vacating_pending: '🚪 Leaving',
+    terminated:       '🔴 Terminated',
+    rejected:         '❌ Rejected'
+  }
 
   const handleApprove = async (agId) => {
     setApproving(s => ({ ...s, [agId]: true }))
@@ -578,6 +592,25 @@ function Agreements({ properties, tenants, agreements, refresh }) {
       toast.success(res.data.message); refresh()
     } catch (err) { toast.error(err.response?.data?.detail || 'Failed') }
     finally { setApproving(s => ({ ...s, [agId]: false })) }
+  }
+
+  const handleConfirmVacate = async (agId) => {
+    if (!window.confirm('Confirm tenant has left? Property will become available again.')) return
+    setConfirming(s => ({ ...s, [agId]: 'confirm' }))
+    try {
+      await API.post(`/requests/confirm-vacate/${agId}`)
+      toast.success('Confirmed! Property is now available ✅'); refresh()
+    } catch (err) { toast.error(err.response?.data?.detail || 'Failed') }
+    finally { setConfirming(s => ({ ...s, [agId]: null })) }
+  }
+
+  const handleRejectVacate = async (agId) => {
+    setConfirming(s => ({ ...s, [agId]: 'reject' }))
+    try {
+      await API.post(`/requests/reject-vacate/${agId}`)
+      toast.success('Vacating rejected. Tenant stays.'); refresh()
+    } catch (err) { toast.error(err.response?.data?.detail || 'Failed') }
+    finally { setConfirming(s => ({ ...s, [agId]: null })) }
   }
 
   return (
@@ -590,23 +623,40 @@ function Agreements({ properties, tenants, agreements, refresh }) {
           <thead><tr><th>#</th><th>Tenant</th><th>Property</th><th>Dates</th><th>Rent</th><th>Status</th><th>Action</th></tr></thead>
           <tbody>
             {agreements.map((ag, i) => {
-              const t = tenants.find(t => t.id === ag.tenant_id)
-              const p = properties.find(p => p.id === ag.property_id)
+              const t  = tenants.find(t => t.id === ag.tenant_id)
+              const p  = properties.find(p => p.id === ag.property_id)
               const st = ag.status || 'active'
               return (
                 <tr key={ag.id}>
                   <td>{i + 1}</td>
-                  <td><div className={styles.tenantName}><div className={styles.miniAvatar}>{t?.name?.[0]?.toUpperCase() || '?'}</div>{t?.name || `#${ag.tenant_id}`}</div></td>
-                  <td>{p?.title || `#${ag.property_id}`}</td>
-                  <td style={{ fontSize: '0.82rem' }}>{ag.start_date} → {ag.end_date}</td>
+                  <td><div className={styles.tenantName}><div className={styles.miniAvatar}>{t?.name?.[0]?.toUpperCase()||'?'}</div>{t?.name||`#${ag.tenant_id}`}</div></td>
+                  <td>{p?.title||`#${ag.property_id}`}</td>
+                  <td style={{ fontSize:'0.82rem' }}>{ag.start_date} → {ag.end_date}</td>
                   <td>₹{ag.rent?.toLocaleString()}</td>
-                  <td><span className={styles.statusBadge} style={{ background: statusColor[st] + '20', color: statusColor[st] }}>{statusLabel[st] || st}</span></td>
+                  <td><span className={styles.statusBadge} style={{ background:(statusColor[st]||'#94a3b8')+'20', color:statusColor[st]||'#94a3b8' }}>{statusLabel[st]||st}</span></td>
                   <td>
-                    {st === 'pending_approval' && !ag.owner_approved
-                      ? <button className={styles.approveBtn} onClick={() => handleApprove(ag.id)} disabled={approving[ag.id]}>
-                          {approving[ag.id] ? '...' : '✅ Approve'}
+                    {st === 'pending_approval' && !ag.owner_approved &&
+                      <button className={styles.approveBtn} onClick={() => handleApprove(ag.id)} disabled={approving[ag.id]}>
+                        {approving[ag.id] ? '...' : '✅ Approve'}
+                      </button>
+                    }
+                    {st === 'vacating_pending' &&
+                      <div style={{ display:'flex', gap:'0.4rem', flexWrap:'wrap' }}>
+                        <button className={styles.acceptBtn} style={{ padding:'0.3rem 0.7rem', fontSize:'0.78rem' }}
+                          onClick={() => handleConfirmVacate(ag.id)} disabled={!!confirming[ag.id]}>
+                          {confirming[ag.id]==='confirm' ? '...' : '✅ Confirm'}
                         </button>
-                      : <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>{ag.owner_approved ? 'Approved ✓' : '—'}</span>
+                        <button className={styles.rejectBtn} style={{ padding:'0.3rem 0.7rem', fontSize:'0.78rem' }}
+                          onClick={() => handleRejectVacate(ag.id)} disabled={!!confirming[ag.id]}>
+                          {confirming[ag.id]==='reject' ? '...' : '❌ Reject'}
+                        </button>
+                      </div>
+                    }
+                    {st === 'active' && ag.owner_approved &&
+                      <span style={{ fontSize:'0.78rem', color:'#94a3b8' }}>Active ✓</span>
+                    }
+                    {(st === 'terminated' || st === 'rejected') &&
+                      <span style={{ fontSize:'0.78rem', color:'#94a3b8' }}>Ended</span>
                     }
                   </td>
                 </tr>
@@ -614,7 +664,7 @@ function Agreements({ properties, tenants, agreements, refresh }) {
             })}
           </tbody>
         </table>
-        {agreements.length === 0 && <p className={styles.empty}>No agreements yet. Accept a rental request to create one.</p>}
+        {agreements.length===0 && <p className={styles.empty}>No agreements yet. Accept a rental request to create one.</p>}
       </div>
     </div>
   )

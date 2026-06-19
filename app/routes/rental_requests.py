@@ -291,3 +291,51 @@ def owner_approve_agreement(
         return {"message": "Agreement fully approved! 🎉 Now ACTIVE.", "status": "active"}
 
     return {"message": "You approved. Waiting for tenant.", "status": "pending_approval"}
+
+
+# ── OWNER: Confirm tenant vacating → unarchive property ──────────
+@router.post("/confirm-vacate/{agreement_id}")
+def confirm_vacate(
+    agreement_id: int,
+    owner_id: int = Depends(auth.get_current_user_id)
+):
+    """Owner confirms tenant has left → property becomes available again."""
+    ag = supabase.table("agreements").select("*").eq("id", agreement_id).execute()
+    if not ag.data:
+        raise HTTPException(status_code=404, detail="Agreement not found")
+    a = ag.data[0]
+
+    # Verify property belongs to owner
+    prop = supabase.table("properties").select("id").eq("id", a["property_id"]).eq("owner_id", owner_id).execute()
+    if not prop.data:
+        raise HTTPException(status_code=403, detail="Not your property")
+
+    # Terminate agreement
+    supabase.table("agreements").update({"status": "terminated"}).eq("id", agreement_id).execute()
+
+    # Unarchive the property
+    supabase.table("properties").update({"status": "available"}).eq("id", a["property_id"]).execute()
+
+    return {"message": "Confirmed. Property is now available for new tenants.", "success": True}
+
+
+# ── OWNER: Reject vacate (tenant stays) ──────────────────────────
+@router.post("/reject-vacate/{agreement_id}")
+def reject_vacate(
+    agreement_id: int,
+    owner_id: int = Depends(auth.get_current_user_id)
+):
+    """Owner rejects vacating request — keeps agreement active."""
+    ag = supabase.table("agreements").select("*").eq("id", agreement_id).execute()
+    if not ag.data:
+        raise HTTPException(status_code=404, detail="Agreement not found")
+    a = ag.data[0]
+
+    prop = supabase.table("properties").select("id").eq("id", a["property_id"]).eq("owner_id", owner_id).execute()
+    if not prop.data:
+        raise HTTPException(status_code=403, detail="Not your property")
+
+    # Revert to active
+    supabase.table("agreements").update({"status": "active"}).eq("id", agreement_id).execute()
+
+    return {"message": "Vacating request rejected. Agreement remains active.", "success": True}

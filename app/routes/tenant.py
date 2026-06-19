@@ -45,79 +45,102 @@ def get_tenants(owner_id: int = Depends(auth.get_current_user_id)):
     return supabase.table("tenants").select("*").in_("property_id", prop_ids).execute().data
 
 
-@router.post("/request-rental")
-def request_rental(
-    req: schemas.RentalRequest,
-    user_id: int = Depends(auth.get_current_user_id)
+@router.delete("/{tenant_id}")
+def remove_tenant(
+    tenant_id: int,
+    owner_id: int = Depends(auth.get_current_user_id)
 ):
+    """Owner removes a tenant — unarchives the property automatically."""
+    tenant = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
+    if not tenant.data:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    t = tenant.data[0]
+
+    if t.get("property_id"):
+        prop = supabase.table("properties").select("id").eq("id", t["property_id"]).eq("owner_id", owner_id).execute()
+        if not prop.data:
+            raise HTTPException(status_code=403, detail="Not your property")
+
+        # Terminate active agreements
+        supabase.table("agreements").update({
+            "status": "terminated"
+        }).eq("tenant_id", tenant_id).eq("property_id", t["property_id"]).execute()
+
+        # Unarchive the property
+        supabase.table("properties").update({"status": "available"}).eq("id", t["property_id"]).execute()
+
+    supabase.table("tenants").delete().eq("id", tenant_id).execute()
+
+    return {"success": True, "message": "Tenant removed and property is now available again"}
+
+
+# ── TENANT: Leave property (tenant-initiated) ─────────────────────
+@router.post("/leave")
+def tenant_leave_property(user_id: int = Depends(auth.get_current_user_id)):
     """
-    Tenant clicks 'Take on Rent' — creates an agreement request.
-    1. Find or create tenant record for this user.
-    2. Create an agreement with status='pending'.
+    Tenant initiates vacating their property.
+    - Finds their active agreement
+    - Terminates it
+    - Sends a leave notification to owner
+    - Does NOT immediately unarchive — owner must confirm first
     """
-    # Get user info
-    user = supabase.table("users").select("*").eq("id", user_id).execute()
-    if not user.data:
-        raise HTTPException(status_code=404, detail="User not found")
-    u = user.data[0]
+    try:
+        user = supabase.table("users").select("*").eq("id", user_id).execute()
+        if not user.data:
+            raise HTTPException(status_code=404, detail="User not found")
+        u = user.data[0]
 
-    # Get property info
-    prop = supabase.table("properties").select("*").eq("id", req.property_id).execute()
-    if not prop.data:
-        raise HTTPException(status_code=404, detail="Property not found")
-    p = prop.data[0]
+        # Find tenant record
+        tenant = supabase.table("tenants").select("*").eq("email", u["email"]).execute()
+        if not tenant.data:
+            raise HTTPException(status_code=404, detail="No tenant record found")
+        t = tenant.data[0]
 
-    # Find or create tenant record
-    existing_tenant = (
-        supabase.table("tenants")
-        .select("*")
-        .eq("email", u["email"])
-        .execute()
-    )
+        if not t.get("property_id"):
+            raise HTTPException(status_code=400, detail="You are not assigned to any property")
 
-    if existing_tenant.data:
-        # Update property_id on existing tenant record
-        tenant_id = existing_tenant.data[0]["id"]
+        # Get property + owner info
+        prop = supabase.table("properties").select("*").eq("id", t["property_id"]).execute()
+        if not prop.data:
+            raise HTTPException(status_code=404, detail="Property not found")
+        p = prop.data[0]
+
+        # Find active agreement
+        ag = (
+            supabase.table("agreements")
+            .select("*")
+            .eq("tenant_id", t["id"])
+            .eq("property_id", t["property_id"])
+            .in_("status", ["active", "pending_approval"])
+            .execute()
+        )
+
+        if not ag.data:
+            raise HTTPException(status_code=400, detail="No active agreement found for this property")
+
+        agreement_id = ag.data[0]["id"]
+
+        # Mark agreement as vacating_pending (owner needs to confirm)
+        supabase.table("agreements").update({
+            "status": "vacating_pending"
+        }).eq("id", agreement_id).execute()
+
+        # Clear tenant's property_id (they've initiated leave)
         supabase.table("tenants").update({
-            "property_id": req.property_id,
-            "phone": req.phone or existing_tenant.data[0].get("phone", "")
-        }).eq("id", tenant_id).execute()
-    else:
-        # Create fresh tenant record
-        new_tenant = supabase.table("tenants").insert({
-            "name":        u["name"],
-            "email":       u["email"],
-            "phone":       req.phone,
-            "property_id": req.property_id
-        }).execute()
-        tenant_id = new_tenant.data[0]["id"]
+            "property_id": None
+        }).eq("id", t["id"]).execute()
 
-    # Check if agreement already exists for this tenant+property
-    exists = (
-        supabase.table("agreements")
-        .select("id")
-        .eq("tenant_id", tenant_id)
-        .eq("property_id", req.property_id)
-        .execute()
-    )
-    if exists.data:
-        raise HTTPException(status_code=400, detail="You already have a rental request for this property")
+        return {
+            "message": "Leave request sent to owner. They will confirm and make the property available.",
+            "property_title": p.get("title", ""),
+            "owner_id": p.get("owner_id")
+        }
 
-    # Create agreement
-    agreement = supabase.table("agreements").insert({
-        "tenant_id":   tenant_id,
-        "property_id": req.property_id,
-        "start_date":  str(req.start_date),
-        "end_date":    str(req.end_date),
-        "rent":        p["price"],
-        "deposit":     p["price"] * 2,   # 2 months deposit by default
-    }).execute()
-
-    return {
-        "message": "Rental request submitted successfully!",
-        "tenant_id":   tenant_id,
-        "agreement":   agreement.data[0] if agreement.data else {}
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("TENANT LEAVE ERROR:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/my-profile")
@@ -129,35 +152,3 @@ def get_my_tenant_profile(user_id: int = Depends(auth.get_current_user_id)):
     email = user.data[0]["email"]
     tenant = supabase.table("tenants").select("*").eq("email", email).execute()
     return tenant.data[0] if tenant.data else None
-
-
-@router.delete("/{tenant_id}")
-def remove_tenant(
-    tenant_id: int,
-    owner_id: int = Depends(auth.get_current_user_id)
-):
-    """Owner removes a tenant — unarchives the property automatically."""
-    # Get tenant to find their property
-    tenant = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
-    if not tenant.data:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-    t = tenant.data[0]
-
-    # Verify property belongs to owner
-    if t.get("property_id"):
-        prop = supabase.table("properties").select("id").eq("id", t["property_id"]).eq("owner_id", owner_id).execute()
-        if not prop.data:
-            raise HTTPException(status_code=403, detail="Not your property")
-
-        # Cancel any active agreements for this tenant+property
-        supabase.table("agreements").update({
-            "status": "terminated"
-        }).eq("tenant_id", tenant_id).eq("property_id", t["property_id"]).execute()
-
-        # Unarchive the property — it's available again
-        supabase.table("properties").update({"status": "available"}).eq("id", t["property_id"]).execute()
-
-    # Remove tenant record
-    supabase.table("tenants").delete().eq("id", tenant_id).execute()
-
-    return {"success": True, "message": "Tenant removed and property is now available again"}

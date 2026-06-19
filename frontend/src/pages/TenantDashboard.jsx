@@ -388,23 +388,45 @@ function CartPage({ cart, removeFromCart, updateCartItem, saveCart, user, refres
 
 /* ── MY AGREEMENTS ────────────────────────────────────────── */
 function MyAgreements({ agreements, properties, refresh }) {
-  const [approving, setApproving] = useState({})
+  const [approving, setApproving]   = useState({})
+  const [leaving, setLeaving]       = useState({})
 
   const handleApprove = async (agId) => {
     setApproving(s => ({ ...s, [agId]: true }))
     try {
       const res = await API.post(`/requests/agreements/${agId}/tenant-approve`)
-      toast.success(res.data.message)
-      refresh()
+      toast.success(res.data.message); refresh()
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to approve')
-    } finally {
-      setApproving(s => ({ ...s, [agId]: false }))
-    }
+    } finally { setApproving(s => ({ ...s, [agId]: false })) }
   }
 
-  const statusColor = { active: '#10b981', pending_approval: '#f59e0b', rejected: '#ef4444' }
-  const statusLabel = { active: '✅ Active', pending_approval: '⏳ Pending Approval', rejected: '❌ Rejected' }
+  const handleLeave = async (agId, propTitle) => {
+    if (!window.confirm(`Are you sure you want to leave "${propTitle}"?\n\nA leave request will be sent to the owner for confirmation.`)) return
+    setLeaving(s => ({ ...s, [agId]: true }))
+    try {
+      const res = await API.post('/tenants/leave')
+      toast.success(res.data.message || 'Leave request sent to owner! 🚪')
+      refresh()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to send leave request')
+    } finally { setLeaving(s => ({ ...s, [agId]: false })) }
+  }
+
+  const statusColor = {
+    active:           '#10b981',
+    pending_approval: '#f59e0b',
+    vacating_pending: '#f97316',
+    terminated:       '#94a3b8',
+    rejected:         '#ef4444'
+  }
+  const statusLabel = {
+    active:           '✅ Active',
+    pending_approval: '⏳ Pending Approval',
+    vacating_pending: '🚪 Leave Requested',
+    terminated:       '🔴 Terminated',
+    rejected:         '❌ Rejected'
+  }
 
   return (
     <div>
@@ -416,22 +438,39 @@ function MyAgreements({ agreements, properties, refresh }) {
               <thead><tr><th>#</th><th>Property</th><th>Move-in</th><th>Move-out</th><th>Rent</th><th>Status</th><th>Action</th></tr></thead>
               <tbody>
                 {agreements.map((ag, i) => {
-                  const p = properties.find(p => p.id === ag.property_id)
+                  const p  = properties.find(p => p.id === ag.property_id)
                   const st = ag.status || 'active'
                   return (
                     <tr key={ag.id}>
                       <td>{i + 1}</td>
-                      <td><strong>{p?.title || `#${ag.property_id}`}</strong><br /><small>📍{p?.location}</small></td>
+                      <td><strong>{p?.title || `#${ag.property_id}`}</strong><br /><small>📍 {p?.location}</small></td>
                       <td>{ag.start_date}</td>
                       <td>{ag.end_date}</td>
                       <td>₹{ag.rent?.toLocaleString()}/mo</td>
-                      <td><span className={styles.statusBadge} style={{ background: statusColor[st] + '20', color: statusColor[st] }}>{statusLabel[st] || st}</span></td>
+                      <td><span className={styles.statusBadge} style={{ background: (statusColor[st]||'#94a3b8')+'20', color: statusColor[st]||'#94a3b8' }}>{statusLabel[st]||st}</span></td>
                       <td>
-                        {st === 'pending_approval' && !ag.tenant_approved
-                          ? <button className={styles.approveBtn} onClick={() => handleApprove(ag.id)} disabled={approving[ag.id]}>
-                              {approving[ag.id] ? '...' : '✅ Approve'}
-                            </button>
-                          : <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{ag.tenant_approved ? 'Approved ✓' : '—'}</span>
+                        {st === 'pending_approval' && !ag.tenant_approved &&
+                          <button className={styles.approveBtn} onClick={() => handleApprove(ag.id)} disabled={approving[ag.id]}>
+                            {approving[ag.id] ? '...' : '✅ Sign'}
+                          </button>
+                        }
+                        {st === 'active' &&
+                          <button
+                            className={styles.leaveBtn}
+                            onClick={() => handleLeave(ag.id, p?.title || 'property')}
+                            disabled={leaving[ag.id]}
+                          >
+                            {leaving[ag.id] ? '...' : '🚪 Leave'}
+                          </button>
+                        }
+                        {st === 'vacating_pending' &&
+                          <span style={{ fontSize: '0.78rem', color: '#f97316' }}>Waiting for owner…</span>
+                        }
+                        {(st === 'terminated' || st === 'rejected') &&
+                          <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Ended</span>
+                        }
+                        {st === 'pending_approval' && ag.tenant_approved &&
+                          <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Signed ✓</span>
                         }
                       </td>
                     </tr>

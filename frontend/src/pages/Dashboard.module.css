@@ -590,3 +590,19 @@
   font-weight: 600;
   margin-top: 0.4rem;
 }
+
+/* Leave property button */
+.leaveBtn {
+  padding: 0.35rem 0.8rem;
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1.5px solid #fed7aa;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.leaveBtn:hover:not(:disabled) { background: #ffedd5; }
+.leaveBtn:disabled { opacity: 0.6; cursor: not-allowed; }
