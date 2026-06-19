@@ -90,27 +90,47 @@ def remove_tenant(
     owner_id: int = Depends(auth.get_current_user_id)
 ):
     """Owner removes a tenant — unarchives the property automatically."""
-    tenant = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
-    if not tenant.data:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-    t = tenant.data[0]
+    try:
+        tenant = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
+        if not tenant.data:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+        t = tenant.data[0]
 
-    if t.get("property_id"):
-        prop = supabase.table("properties").select("id").eq("id", t["property_id"]).eq("owner_id", owner_id).execute()
-        if not prop.data:
-            raise HTTPException(status_code=403, detail="Not your property")
+        print(f"REMOVE TENANT: tenant_id={tenant_id}, owner_id={owner_id}, tenant.property_id={t.get('property_id')}")
 
-        # Terminate active agreements
-        supabase.table("agreements").update({
-            "status": "terminated"
-        }).eq("tenant_id", tenant_id).eq("property_id", t["property_id"]).execute()
+        property_id_to_unarchive = None
 
-        # Unarchive the property
-        supabase.table("properties").update({"status": "available"}).eq("id", t["property_id"]).execute()
+        if t.get("property_id"):
+            prop = supabase.table("properties").select("id,owner_id").eq("id", t["property_id"]).execute()
+            if prop.data:
+                print(f"Property owner_id in DB: {prop.data[0]['owner_id']}, requesting owner_id: {owner_id}")
+                if prop.data[0]["owner_id"] != owner_id:
+                    raise HTTPException(status_code=403, detail=f"Not your property (owned by {prop.data[0]['owner_id']}, you are {owner_id})")
+                property_id_to_unarchive = t["property_id"]
+        else:
+            # Tenant has no property_id — check via agreements
+            ag = supabase.table("agreements").select("property_id").eq("tenant_id", tenant_id).execute()
+            if ag.data:
+                for a in ag.data:
+                    prop = supabase.table("properties").select("id,owner_id").eq("id", a["property_id"]).execute()
+                    if prop.data and prop.data[0]["owner_id"] == owner_id:
+                        property_id_to_unarchive = a["property_id"]
+                        break
 
-    supabase.table("tenants").delete().eq("id", tenant_id).execute()
+        if property_id_to_unarchive:
+            # Terminate active agreements
+            supabase.table("agreements").update({"status": "terminated"}).eq("tenant_id", tenant_id).eq("property_id", property_id_to_unarchive).execute()
+            # Unarchive the property
+            supabase.table("properties").update({"status": "available"}).eq("id", property_id_to_unarchive).execute()
 
-    return {"success": True, "message": "Tenant removed and property is now available again"}
+        supabase.table("tenants").delete().eq("id", tenant_id).execute()
+        return {"success": True, "message": "Tenant removed and property is now available again"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("REMOVE TENANT ERROR:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── TENANT: Leave property (tenant-initiated) ─────────────────────
