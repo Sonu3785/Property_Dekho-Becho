@@ -23,9 +23,11 @@ export default function TenantDashboard() {
   const [payments, setPayments]     = useState([])
   const [agreements, setAgreements] = useState([])
   const [myRequests, setMyRequests] = useState([])
-  const [cart, setCart]             = useState([])           // [{property, startDate, endDate, phone}]
+  const [cart, setCart]             = useState([])
   const [loading, setLoading]       = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [loadError, setLoadError]   = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
     fetchAll(true)
@@ -33,15 +35,34 @@ export default function TenantDashboard() {
     if (saved) try { setCart(JSON.parse(saved)) } catch {}
   }, [])
 
-  const fetchAll = async (initial = false) => {
-    if (initial) setLoading(true)
+  const fetchAll = async (initial = false, attempt = 0) => {
+    if (initial) { setLoading(true); setLoadError(false) }
     else setRefreshing(true)
+
     const [p, pay, ag, reqs] = await Promise.allSettled([
       API.get('/properties/all'),
       API.get('/payments/my'),
       API.get('/agreements/my'),
       API.get('/requests/my'),
     ])
+
+    const propertiesOk = p.status === 'fulfilled' && Array.isArray(p.value.data)
+
+    if (!propertiesOk && initial && attempt < 3) {
+      setRetryCount(attempt + 1)
+      setTimeout(() => fetchAll(true, attempt + 1), (attempt + 1) * 5000)
+      return
+    }
+
+    if (!propertiesOk && initial) {
+      setLoadError(true)
+      setLoading(false)
+      setRefreshing(false)
+      return
+    }
+
+    setLoadError(false)
+    setRetryCount(0)
     setProperties(p.status    === 'fulfilled' && Array.isArray(p.value.data)    ? p.value.data    : [])
     setPayments(  pay.status  === 'fulfilled' && Array.isArray(pay.value.data)  ? pay.value.data  : [])
     setAgreements(ag.status   === 'fulfilled' && Array.isArray(ag.value.data)   ? ag.value.data   : [])
@@ -89,9 +110,32 @@ export default function TenantDashboard() {
       <div className={styles.content}>
         {refreshing && <div className={styles.refreshBar}><span className={styles.spin} /> Refreshing…</div>}
         {loading
-          ? <div className={styles.loader}><span className={styles.spin} /></div>
+          ? <div className={styles.loader}>
+              <span className={styles.spin} />
+              {retryCount > 0 && (
+                <p style={{ marginTop: '1rem', color: '#64748b', fontSize: '0.9rem', textAlign: 'center' }}>
+                  ⏳ Server is waking up… (attempt {retryCount}/3)<br />
+                  <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>This takes ~30 seconds on first load</span>
+                </p>
+              )}
+            </div>
+          : loadError
+          ? <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
+              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>😴</div>
+              <h3 style={{ color: '#1a202c', marginBottom: '0.5rem' }}>Server took too long to respond</h3>
+              <p style={{ color: '#64748b', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
+                The backend is hosted on Render's free tier and may take up to 60 seconds to wake up.<br />
+                Click retry to try again.
+              </p>
+              <button
+                className={styles.addBtn}
+                onClick={() => fetchAll(true)}
+              >
+                🔄 Retry
+              </button>
+            </div>
           : <>
-            {activeTab === 'overview'   && <TenantOverview properties={properties} payments={payments} agreements={agreements} myRequests={myRequests} user={user} setActiveTab={setActiveTab} cartCount={cartCount} />}
+            {activeTab === 'overview'   && <TenantOverview properties={properties} payments={payments} agreements={agreements} myRequests={myRequests} user={user} setActiveTab={setActiveTab} cartCount={cartCount} refresh={fetchAll} />}
             {activeTab === 'browse'     && <BrowseProperties properties={properties} agreements={agreements} myRequests={myRequests} addToCart={addToCart} cart={cart} />}
             {activeTab === 'cart'       && <CartPage cart={cart} removeFromCart={removeFromCart} updateCartItem={updateCartItem} saveCart={saveCart} user={user} refresh={fetchAll} setActiveTab={setActiveTab} />}
             {activeTab === 'requests'   && <MyRequests myRequests={myRequests} agreements={agreements} refresh={fetchAll} />}
@@ -105,9 +149,16 @@ export default function TenantDashboard() {
 }
 
 /* ── OVERVIEW ─────────────────────────────────────────────── */
-function TenantOverview({ properties, payments, agreements, user, setActiveTab, cartCount }) {
+function TenantOverview({ properties, payments, agreements, user, setActiveTab, cartCount, refresh }) {
   const paid    = payments.filter(p => p.status === 'paid').length
-  const pending = payments.filter(p => p.status === 'pending').length
+  const [thumbs, setThumbs] = useState({})
+
+  useEffect(() => {
+    if (!properties.length) return
+    API.get('/photos/thumbnails', { params: { ids: properties.map(p => p.id).join(',') } })
+      .then(res => { if (res.data && typeof res.data === 'object') setThumbs(res.data) })
+      .catch(() => {})
+  }, [properties.length])
 
   return (
     <div>
@@ -116,6 +167,14 @@ function TenantOverview({ properties, payments, agreements, user, setActiveTab, 
           <h2>Welcome, {user?.name} 🏡</h2>
           <p className={styles.subtitle}>Your rental dashboard</p>
         </div>
+        <button
+          className={styles.sortBtn}
+          onClick={() => refresh(false)}
+          title="Refresh data"
+          style={{ fontSize: '1.1rem', padding: '0.5rem 1rem' }}
+        >
+          🔄 Refresh
+        </button>
       </div>
       <div className={styles.statsGrid}>
         {[
@@ -137,11 +196,21 @@ function TenantOverview({ properties, payments, agreements, user, setActiveTab, 
         : <div className={styles.cardGrid}>
             {properties.slice(0, 6).map(p => (
               <div key={p.id} className={styles.propCard}>
-                <div className={styles.propCardHeader}><span className={styles.propIcon}>🏢</span><span className={styles.availBadge}>Available</span></div>
-                <h4>{p.title}</h4>
-                <p className={styles.propLocation}>📍 {p.location}</p>
-                <div className={styles.propPrice}>₹{p.price?.toLocaleString()}<span>/month</span></div>
-                <button className={styles.contactBtn} onClick={() => setActiveTab('browse')}>View Details →</button>
+                <div className={styles.propCardPhotoWrap}>
+                  {thumbs[p.id]
+                    ? <img src={thumbs[p.id]} alt={p.title} />
+                    : <div className={styles.propCardPhotoPlaceholder}>🏢</div>
+                  }
+                </div>
+                <div className={styles.propCardBody}>
+                  <div className={styles.propCardHeader}>
+                    <span className={styles.availBadge}>Available</span>
+                  </div>
+                  <h4>{p.title}</h4>
+                  <p className={styles.propLocation}>📍 {p.location}</p>
+                  <div className={styles.propPrice}>₹{p.price?.toLocaleString()}<span>/month</span></div>
+                  <button className={styles.contactBtn} onClick={() => setActiveTab('browse')}>View Details →</button>
+                </div>
               </div>
             ))}
           </div>
@@ -151,7 +220,7 @@ function TenantOverview({ properties, payments, agreements, user, setActiveTab, 
 }
 
 /* ── BROWSE PROPERTIES ────────────────────────────────────── */
-function BrowseProperties({ properties, agreements, addToCart, cart }) {
+function BrowseProperties({ properties, agreements, myRequests, addToCart, cart }) {
   const [search, setSearch]       = useState('')
   const [maxPrice, setMaxPrice]   = useState('')
   const [sortBy, setSortBy]       = useState('price')
@@ -159,8 +228,12 @@ function BrowseProperties({ properties, agreements, addToCart, cart }) {
   const [selected, setSelected]   = useState(null)
   const [thumbs, setThumbs]       = useState({})  // propertyId -> thumbnail url
 
-  const alreadyRequested = agreements.map(a => a.property_id)
-  const inCart           = cart.map(c => c.property.id)
+  // Properties with an active agreement OR a pending/accepted request
+  const alreadyRequested = [
+    ...agreements.map(a => a.property_id),
+    ...myRequests.map(r => r.property_id)
+  ]
+  const inCart = cart.map(c => c.property.id)
 
   // Fetch thumbnails for all properties in ONE call
   useEffect(() => {
@@ -214,30 +287,37 @@ function BrowseProperties({ properties, agreements, addToCart, cart }) {
           const carted    = inCart.includes(p.id)
           return (
             <div key={p.id} className={styles.propCard}>
-              <div className={styles.propCardHeader}>
+              <div className={styles.propCardPhotoWrap}>
                 {thumbs[p.id]
-                  ? <img src={thumbs[p.id]} alt={p.title} className={styles.propThumb} />
-                  : <span className={styles.propIcon}>🏢</span>
+                  ? <img src={thumbs[p.id]} alt={p.title} />
+                  : <div className={styles.propCardPhotoPlaceholder}>🏢</div>
                 }
-                {requested && <span className={styles.availBadge} style={{ background: '#d1fae5', color: '#065f46' }}>✅ Requested</span>}
-                {!requested && carted && <span className={styles.availBadge} style={{ background: '#fef3c7', color: '#92400e' }}>🛒 In Cart</span>}
-                {!requested && !carted && <span className={styles.availBadge}>Available</span>}
               </div>
-              <h4>{p.title}</h4>
-              <p className={styles.propLocation}>📍 {p.location}</p>
-              <div className={styles.propPrice}>₹{p.price?.toLocaleString()}<span>/month</span></div>
-              <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '0.3rem 0' }}>Deposit: ₹{(p.price * 2)?.toLocaleString()}</p>
-              <div className={styles.propActions}>
-                <button className={styles.detailBtn} onClick={() => setSelected(p)}>View Details</button>
-                {!requested && !carted &&
-                  <button className={styles.cartBtn} onClick={() => addToCart(p)}>🛒 Add to Cart</button>
-                }
-                {carted && !requested &&
-                  <button className={styles.cartedBtn} disabled>🛒 In Cart</button>
-                }
-                {requested &&
-                  <button className={styles.requestedBtn} disabled>✅ Applied</button>
-                }
+              <div className={styles.propCardBody}>
+                <div className={styles.propCardHeader}>
+                  <span className={styles.availBadge} style={
+                    requested ? { background: '#d1fae5', color: '#065f46' } :
+                    carted    ? { background: '#fef3c7', color: '#92400e' } : {}
+                  }>
+                    {requested ? '✅ Requested' : carted ? '🛒 In Cart' : 'Available'}
+                  </span>
+                </div>
+                <h4>{p.title}</h4>
+                <p className={styles.propLocation}>📍 {p.location}</p>
+                <div className={styles.propPrice}>₹{p.price?.toLocaleString()}<span>/month</span></div>
+                <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '0.3rem 0' }}>Deposit: ₹{(p.price * 2)?.toLocaleString()}</p>
+                <div className={styles.propActions}>
+                  <button className={styles.detailBtn} onClick={() => setSelected(p)}>View Details</button>
+                  {!requested && !carted &&
+                    <button className={styles.cartBtn} onClick={() => addToCart(p)}>🛒 Add to Cart</button>
+                  }
+                  {carted && !requested &&
+                    <button className={styles.cartedBtn} disabled>🛒 In Cart</button>
+                  }
+                  {requested &&
+                    <button className={styles.requestedBtn} disabled>✅ Applied</button>
+                  }
+                </div>
               </div>
             </div>
           )
@@ -250,8 +330,9 @@ function BrowseProperties({ properties, agreements, addToCart, cart }) {
         <div className={styles.modalOverlay} onClick={() => setSelected(null)}>
           <div className={styles.modal} onClick={e => e.stopPropagation()}>
             <button className={styles.modalClose} onClick={() => setSelected(null)}>✕</button>
-            <div className={styles.modalIcon}>🏢</div>
-            <h2>{selected.title}</h2>
+            {/* Photo Gallery */}
+            <PhotoGallery propertyId={selected.id} />
+            <h2 style={{ marginTop: '1rem' }}>{selected.title}</h2>
             <p className={styles.modalLocation}>📍 {selected.location}</p>
             <div className={styles.modalDetails}>
               <div className={styles.modalRow}><span>Monthly Rent</span><strong>₹{selected.price?.toLocaleString()}</strong></div>

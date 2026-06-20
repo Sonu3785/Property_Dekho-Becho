@@ -3,7 +3,7 @@ import API from '../api/axios'
 import toast from 'react-hot-toast'
 import styles from './PhotoUploader.module.css'
 
-export default function PhotoUploader({ propertyId, propertyTitle }) {
+export default function PhotoUploader({ propertyId, propertyTitle, onPhotosChanged }) {
   const [photos, setPhotos]     = useState([])
   const [uploading, setUploading] = useState(false)
   const [deleting, setDeleting] = useState({})
@@ -14,7 +14,9 @@ export default function PhotoUploader({ propertyId, propertyTitle }) {
   const fetchPhotos = async () => {
     try {
       const res = await API.get(`/photos/${propertyId}`)
-      setPhotos(Array.isArray(res.data) ? res.data : [])
+      const data = Array.isArray(res.data) ? res.data : []
+      setPhotos(data)
+      if (onPhotosChanged) onPhotosChanged(propertyId, data)
     } catch { setPhotos([]) }
   }
 

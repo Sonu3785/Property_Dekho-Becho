@@ -1,7 +1,9 @@
 import axios from 'axios'
 
+const BASE_URL = 'https://property-dekho-becho.onrender.com'
+
 const API = axios.create({
-  baseURL: 'https://property-dekho-becho.onrender.com',
+  baseURL: BASE_URL,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -15,5 +17,10 @@ API.interceptors.request.use((config) => {
   }
   return config
 })
+
+// Pre-warm the backend as soon as this module loads.
+// Fires a silent ping to /health so the server is awake
+// by the time the user clicks Login or the dashboard fetches data.
+axios.get(`${BASE_URL}/health`).catch(() => {})
 
 export default API

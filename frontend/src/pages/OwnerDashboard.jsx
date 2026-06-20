@@ -25,12 +25,15 @@ export default function OwnerDashboard() {
   const [requests, setRequests]     = useState([])
   const [loading, setLoading]       = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [loadError, setLoadError]   = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => { fetchAll(true) }, [])
 
-  const fetchAll = async (initial = false) => {
-    if (initial) setLoading(true)
+  const fetchAll = async (initial = false, attempt = 0) => {
+    if (initial) { setLoading(true); setLoadError(false) }
     else setRefreshing(true)
+
     const [p, t, pay, ag, req] = await Promise.allSettled([
       API.get('/properties/'),
       API.get('/tenants/'),
@@ -38,6 +41,27 @@ export default function OwnerDashboard() {
       API.get('/agreements/'),
       API.get('/requests/incoming'),
     ])
+
+    // Check if properties fetch failed (primary indicator of backend down)
+    const propertiesOk = p.status === 'fulfilled' && Array.isArray(p.value.data)
+
+    if (!propertiesOk && initial && attempt < 3) {
+      // Backend cold-starting — retry with backoff (5s, 10s, 15s)
+      setRetryCount(attempt + 1)
+      setTimeout(() => fetchAll(true, attempt + 1), (attempt + 1) * 5000)
+      return
+    }
+
+    if (!propertiesOk && initial) {
+      // Gave up after retries
+      setLoadError(true)
+      setLoading(false)
+      setRefreshing(false)
+      return
+    }
+
+    setLoadError(false)
+    setRetryCount(0)
     setProperties(p.status   === 'fulfilled' && Array.isArray(p.value.data)   ? p.value.data   : [])
     setTenants(   t.status   === 'fulfilled' && Array.isArray(t.value.data)   ? t.value.data   : [])
     setPayments(  pay.status === 'fulfilled' && Array.isArray(pay.value.data) ? pay.value.data : [])
@@ -62,7 +86,30 @@ export default function OwnerDashboard() {
       <div className={styles.content}>
         {refreshing && <div className={styles.refreshBar}><span className={styles.spin} /> Refreshing…</div>}
         {loading
-          ? <div className={styles.loader}><span className={styles.spin} /></div>
+          ? <div className={styles.loader}>
+              <span className={styles.spin} />
+              {retryCount > 0 && (
+                <p style={{ marginTop: '1rem', color: '#64748b', fontSize: '0.9rem', textAlign: 'center' }}>
+                  ⏳ Server is waking up… (attempt {retryCount}/3)<br />
+                  <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>This takes ~30 seconds on first load</span>
+                </p>
+              )}
+            </div>
+          : loadError
+          ? <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
+              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>😴</div>
+              <h3 style={{ color: '#1a202c', marginBottom: '0.5rem' }}>Server took too long to respond</h3>
+              <p style={{ color: '#64748b', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
+                The backend is hosted on Render's free tier and may take up to 60 seconds to wake up.<br />
+                Click retry to try again.
+              </p>
+              <button
+                className={styles.addBtn}
+                onClick={() => fetchAll(true)}
+              >
+                🔄 Retry
+              </button>
+            </div>
           : <>
             {activeTab === 'overview'   && <Overview   {...ctx} setActiveTab={setActiveTab} />}
             {activeTab === 'properties' && <Properties {...ctx} />}
@@ -78,9 +125,17 @@ export default function OwnerDashboard() {
 }
 
 /* ── OVERVIEW ─────────────────────────────────────────────────── */
-function Overview({ properties, tenants, payments, agreements, setActiveTab, user }) {
+function Overview({ properties, tenants, payments, agreements, setActiveTab, user, refresh }) {
   const paid  = payments.filter(p => p.status === 'paid').length
   const total = payments.reduce((s, p) => s + (p.amount || 0), 0)
+  const [thumbs, setThumbs] = useState({})
+
+  useEffect(() => {
+    if (!properties.length) return
+    API.get('/photos/thumbnails', { params: { ids: properties.map(p => p.id).join(',') } })
+      .then(res => { if (res.data && typeof res.data === 'object') setThumbs(res.data) })
+      .catch(() => {})
+  }, [properties.length])
 
   const stats = [
     { icon: '🏢', label: 'Properties',  value: properties.length,  color: '#667eea', tab: 'properties' },
@@ -96,6 +151,14 @@ function Overview({ properties, tenants, payments, agreements, setActiveTab, use
           <h2>Good day, {user?.name} 👋</h2>
           <p className={styles.subtitle}>Portfolio overview • Total collected ₹{total.toLocaleString()}</p>
         </div>
+        <button
+          className={styles.sortBtn}
+          onClick={() => refresh(false)}
+          title="Refresh data"
+          style={{ fontSize: '1.1rem', padding: '0.5rem 1rem' }}
+        >
+          🔄 Refresh
+        </button>
       </div>
 
       <div className={styles.statsGrid}>
@@ -115,7 +178,7 @@ function Overview({ properties, tenants, payments, agreements, setActiveTab, use
             <p>No properties yet. Go to <strong>Properties</strong> tab to add your first one!</p>
           </div>
         : <div className={styles.cardGrid}>
-            {properties.slice(0, 6).map(p => <PropCard key={p.id} p={p} />)}
+            {properties.slice(0, 6).map(p => <PropCard key={p.id} p={p} thumb={thumbs[p.id] || null} />)}
           </div>      }
 
       <div className={styles.overviewGrid} style={{ marginTop: '2rem' }}>
@@ -152,33 +215,45 @@ function Overview({ properties, tenants, payments, agreements, setActiveTab, use
   )
 }
 
-function PropCard({ p, onDelete, onArchive, showManage = false }) {
+function PropCard({ p, onDelete, onArchive, showManage = false, thumb = null, onThumbChanged = null }) {
   const [expanded, setExpanded] = useState(false)
+
+  const handlePhotosChanged = (propertyId, photos) => {
+    if (!onThumbChanged) return
+    // Find the thumbnail photo or fall back to first
+    const thumbPhoto = photos.find(ph => ph.is_thumbnail) || photos[0]
+    onThumbChanged(propertyId, thumbPhoto?.url || null)
+  }
 
   return (
     <div className={styles.propCard}>
-      <div className={styles.propCardHeader}>
-        <span className={styles.propIcon}>🏢</span>
-        <div style={{ display: 'flex', gap: '0.4rem' }}>
-          {onArchive && <button className={styles.archiveBtn} onClick={() => onArchive(p.id)} title="Archive">🗄️</button>}
-          {onDelete  && <button className={styles.deleteBtn}  onClick={() => onDelete(p.id)}  title="Delete">🗑️</button>}
-        </div>
+      <div className={styles.propCardPhotoWrap}>
+        {thumb
+          ? <img src={thumb} alt={p.title} />
+          : <div className={styles.propCardPhotoPlaceholder}>🏢</div>
+        }
       </div>
-      <h4>{p.title}</h4>
-      <p className={styles.propLocation}>📍 {p.location}</p>
-      <div className={styles.propPrice}>₹{p.price?.toLocaleString()}<span>/month</span></div>
-      <div className={styles.propId}>ID #{p.id}</div>
-      {showManage && (
-        <button
-          className={styles.managePhotosBtn}
-          onClick={() => setExpanded(v => !v)}
-        >
-          📸 {expanded ? 'Hide Photos' : 'Manage Photos'}
-        </button>
-      )}
-      {showManage && expanded && (
-        <PhotoUploader propertyId={p.id} propertyTitle={p.title} />
-      )}
+      <div className={styles.propCardBody}>
+        <div className={styles.propCardHeader}>
+          <span />
+          <div style={{ display: 'flex', gap: '0.4rem' }}>
+            {onArchive && <button className={styles.archiveBtn} onClick={() => onArchive(p.id)} title="Archive">🗄️</button>}
+            {onDelete  && <button className={styles.deleteBtn}  onClick={() => onDelete(p.id)}  title="Delete">🗑️</button>}
+          </div>
+        </div>
+        <h4>{p.title}</h4>
+        <p className={styles.propLocation}>📍 {p.location}</p>
+        <div className={styles.propPrice}>₹{p.price?.toLocaleString()}<span>/month</span></div>
+        <div className={styles.propId}>ID #{p.id}</div>
+        {showManage && (
+          <button className={styles.managePhotosBtn} onClick={() => setExpanded(v => !v)}>
+            📸 {expanded ? 'Hide Photos' : 'Manage Photos'}
+          </button>
+        )}
+        {showManage && expanded && (
+          <PhotoUploader propertyId={p.id} propertyTitle={p.title} onPhotosChanged={handlePhotosChanged} />
+        )}
+      </div>
     </div>
   )
 }
@@ -190,8 +265,17 @@ function Properties({ properties, user, refresh }) {
   const [sortDir, setSortDir]   = useState('asc')
   const [showForm, setShowForm] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
-  const [form, setForm]         = useState({ title: '', location: '', price: '' })
-  const [saving, setSaving]     = useState(false)
+  const [form, setForm]           = useState({ title: '', location: '', price: '' })
+  const [saving, setSaving]       = useState(false)
+  const [newPropId, setNewPropId] = useState(null)
+  const [thumbs, setThumbs]       = useState({})
+
+  useEffect(() => {
+    if (!properties.length) return
+    API.get('/photos/thumbnails', { params: { ids: properties.map(p => p.id).join(',') } })
+      .then(res => { if (res.data && typeof res.data === 'object') setThumbs(res.data) })
+      .catch(() => {})
+  }, [properties.length])
 
   const available = properties.filter(p => (p.status || 'available') === 'available')
   const archived  = properties.filter(p => p.status === 'archived')
@@ -210,11 +294,27 @@ function Properties({ properties, user, refresh }) {
   const handleAdd = async (e) => {
     e.preventDefault(); setSaving(true)
     try {
-      await API.post('/properties/', { title: form.title, location: form.location, price: parseFloat(form.price), owner_id: user?.id || 1 })
-      toast.success('Property added! 🏢')
-      refresh(); setShowForm(false); setForm({ title: '', location: '', price: '' })
+      const res = await API.post('/properties/', {
+        title: form.title, location: form.location,
+        price: parseFloat(form.price), owner_id: user?.id || 1
+      })
+      const created = res.data?.data?.[0]
+      if (created?.id) {
+        setNewPropId(created.id)
+        toast.success('Property added! 🏢 Add photos below — or skip to finish.')
+      } else {
+        toast.success('Property added! 🏢')
+        setShowForm(false)
+      }
+      setForm({ title: '', location: '', price: '' })
+      refresh()
     } catch { toast.error('Failed to add property') }
     finally { setSaving(false) }
+  }
+
+  const handleDoneWithPhotos = () => {
+    setNewPropId(null)
+    setShowForm(false)
   }
 
   const handleDelete = async (id) => {
@@ -276,7 +376,7 @@ function Properties({ properties, user, refresh }) {
       {filtered.length === 0
         ? <div className={styles.emptyState}><div className={styles.emptyIcon}>🏢</div><p>{search ? 'No results.' : 'No available properties. Add one!'}</p></div>
         : <div className={styles.cardGrid}>
-            {filtered.map(p => <PropCard key={p.id} p={p} onDelete={handleDelete} onArchive={handleArchive} showManage={true} />)}
+            {filtered.map(p => <PropCard key={p.id} p={p} onDelete={handleDelete} onArchive={handleArchive} showManage={true} thumb={thumbs[p.id] || null} onThumbChanged={(pid, url) => setThumbs(t => ({ ...t, [pid]: url }))} />)}
           </div>
       }
 
@@ -293,17 +393,19 @@ function Properties({ properties, user, refresh }) {
             <div className={styles.cardGrid}>
               {filteredArchived.map(p => (
                 <div key={p.id} className={styles.propCard} style={{ opacity: 0.75, borderStyle: 'dashed' }}>
-                  <div className={styles.propCardHeader}>
-                    <span className={styles.propIcon}>🗄️</span>
-                    <div style={{ display: 'flex', gap: '0.4rem' }}>
-                      <button className={styles.unarchiveBtn} onClick={() => handleUnarchive(p.id)} title="Make available again">↩️</button>
-                      <button className={styles.deleteBtn}    onClick={() => handleDelete(p.id)}    title="Delete permanently">🗑️</button>
+                  <div className={styles.propCardBody}>
+                    <div className={styles.propCardHeader}>
+                      <span className={styles.propIcon}>🗄️</span>
+                      <div style={{ display: 'flex', gap: '0.4rem' }}>
+                        <button className={styles.unarchiveBtn} onClick={() => handleUnarchive(p.id)} title="Make available again">↩️</button>
+                        <button className={styles.deleteBtn}    onClick={() => handleDelete(p.id)}    title="Delete permanently">🗑️</button>
+                      </div>
                     </div>
+                    <h4>{p.title}</h4>
+                    <p className={styles.propLocation}>📍 {p.location}</p>
+                    <div className={styles.propPrice}>₹{p.price?.toLocaleString()}<span>/month</span></div>
+                    <span className={styles.archivedBadge}>Occupied / Archived</span>
                   </div>
-                  <h4>{p.title}</h4>
-                  <p className={styles.propLocation}>📍 {p.location}</p>
-                  <div className={styles.propPrice}>₹{p.price?.toLocaleString()}<span>/month</span></div>
-                  <span className={styles.archivedBadge}>Occupied / Archived</span>
                 </div>
               ))}
             </div>

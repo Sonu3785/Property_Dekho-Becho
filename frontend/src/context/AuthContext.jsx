@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react'
+import toast from 'react-hot-toast'
 
 const AuthContext = createContext()
 
@@ -35,19 +36,14 @@ export function AuthProvider({ children }) {
     const warnAt = msLeft - 2 * 60 * 1000
     if (warnAt > 0) {
       setTimeout(() => {
-        // Dynamic import to avoid circular dependency
-        import('react-hot-toast').then(({ default: toast }) => {
-          toast('⏰ Your session expires in 2 minutes. Save your work!', {
-            duration: 8000,
-            icon: '⚠️'
-          })
+        toast('⏰ Your session expires in 2 minutes. Save your work!', {
+          duration: 8000,
+          icon: '⚠️'
         })
       }, warnAt)
     }
     logoutTimer.current = setTimeout(() => {
-      import('react-hot-toast').then(({ default: toast }) => {
-        toast.error('Session expired. Please log in again.')
-      })
+      toast.error('Session expired. Please log in again.')
       logoutFn()
     }, msLeft)
   }

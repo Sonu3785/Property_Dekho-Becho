@@ -39,3 +39,7 @@ def root():
     return {
         "message": "Rental Management System API Running 🚀"
     }
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
