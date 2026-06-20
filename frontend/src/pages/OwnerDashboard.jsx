@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import API from '../api/axios'
 import toast from 'react-hot-toast'
 import Navbar from '../components/Navbar'
+import PhotoUploader from '../components/PhotoUploader'
 import styles from './Dashboard.module.css'
 
 const TABS = [
@@ -115,8 +116,7 @@ function Overview({ properties, tenants, payments, agreements, setActiveTab, use
           </div>
         : <div className={styles.cardGrid}>
             {properties.slice(0, 6).map(p => <PropCard key={p.id} p={p} />)}
-          </div>
-      }
+          </div>      }
 
       <div className={styles.overviewGrid} style={{ marginTop: '2rem' }}>
         <div className={styles.overviewCard}>
@@ -152,17 +152,33 @@ function Overview({ properties, tenants, payments, agreements, setActiveTab, use
   )
 }
 
-function PropCard({ p, onDelete }) {
+function PropCard({ p, onDelete, onArchive, showManage = false }) {
+  const [expanded, setExpanded] = useState(false)
+
   return (
     <div className={styles.propCard}>
       <div className={styles.propCardHeader}>
         <span className={styles.propIcon}>🏢</span>
-        {onDelete && <button className={styles.deleteBtn} onClick={() => onDelete(p.id)}>🗑️</button>}
+        <div style={{ display: 'flex', gap: '0.4rem' }}>
+          {onArchive && <button className={styles.archiveBtn} onClick={() => onArchive(p.id)} title="Archive">🗄️</button>}
+          {onDelete  && <button className={styles.deleteBtn}  onClick={() => onDelete(p.id)}  title="Delete">🗑️</button>}
+        </div>
       </div>
       <h4>{p.title}</h4>
       <p className={styles.propLocation}>📍 {p.location}</p>
       <div className={styles.propPrice}>₹{p.price?.toLocaleString()}<span>/month</span></div>
       <div className={styles.propId}>ID #{p.id}</div>
+      {showManage && (
+        <button
+          className={styles.managePhotosBtn}
+          onClick={() => setExpanded(v => !v)}
+        >
+          📸 {expanded ? 'Hide Photos' : 'Manage Photos'}
+        </button>
+      )}
+      {showManage && expanded && (
+        <PhotoUploader propertyId={p.id} propertyTitle={p.title} />
+      )}
     </div>
   )
 }
@@ -260,21 +276,7 @@ function Properties({ properties, user, refresh }) {
       {filtered.length === 0
         ? <div className={styles.emptyState}><div className={styles.emptyIcon}>🏢</div><p>{search ? 'No results.' : 'No available properties. Add one!'}</p></div>
         : <div className={styles.cardGrid}>
-            {filtered.map(p => (
-              <div key={p.id} className={styles.propCard}>
-                <div className={styles.propCardHeader}>
-                  <span className={styles.propIcon}>🏢</span>
-                  <div style={{ display: 'flex', gap: '0.4rem' }}>
-                    <button className={styles.archiveBtn} onClick={() => handleArchive(p.id)} title="Archive property">🗄️</button>
-                    <button className={styles.deleteBtn} onClick={() => handleDelete(p.id)} title="Delete permanently">🗑️</button>
-                  </div>
-                </div>
-                <h4>{p.title}</h4>
-                <p className={styles.propLocation}>📍 {p.location}</p>
-                <div className={styles.propPrice}>₹{p.price?.toLocaleString()}<span>/month</span></div>
-                <span className={styles.availBadge}>Available</span>
-              </div>
-            ))}
+            {filtered.map(p => <PropCard key={p.id} p={p} onDelete={handleDelete} onArchive={handleArchive} showManage={true} />)}
           </div>
       }
 
@@ -290,12 +292,12 @@ function Properties({ properties, user, refresh }) {
           {showArchived && (
             <div className={styles.cardGrid}>
               {filteredArchived.map(p => (
-                <div key={p.id} className={styles.propCard} style={{ opacity: 0.7, borderStyle: 'dashed' }}>
+                <div key={p.id} className={styles.propCard} style={{ opacity: 0.75, borderStyle: 'dashed' }}>
                   <div className={styles.propCardHeader}>
                     <span className={styles.propIcon}>🗄️</span>
                     <div style={{ display: 'flex', gap: '0.4rem' }}>
                       <button className={styles.unarchiveBtn} onClick={() => handleUnarchive(p.id)} title="Make available again">↩️</button>
-                      <button className={styles.deleteBtn} onClick={() => handleDelete(p.id)} title="Delete permanently">🗑️</button>
+                      <button className={styles.deleteBtn}    onClick={() => handleDelete(p.id)}    title="Delete permanently">🗑️</button>
                     </div>
                   </div>
                   <h4>{p.title}</h4>

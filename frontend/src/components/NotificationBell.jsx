@@ -18,8 +18,8 @@ export default function NotificationBell({ onNavigate }) {
 
   useEffect(() => {
     fetchNotifications()
-    // Poll every 30 seconds for live updates
-    pollRef.current = setInterval(fetchNotifications, 30000)
+    // Poll every 2 minutes — prevents Supabase rate limiting
+    pollRef.current = setInterval(fetchNotifications, 120000)
     return () => clearInterval(pollRef.current)
   }, [])
 

@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import API from '../api/axios'
 import toast from 'react-hot-toast'
 import Navbar from '../components/Navbar'
+import PhotoGallery from '../components/PhotoGallery'
 import styles from './Dashboard.module.css'
 import cartStyles from './Cart.module.css'
 
@@ -155,10 +156,25 @@ function BrowseProperties({ properties, agreements, addToCart, cart }) {
   const [maxPrice, setMaxPrice]   = useState('')
   const [sortBy, setSortBy]       = useState('price')
   const [sortDir, setSortDir]     = useState('asc')
-  const [selected, setSelected]   = useState(null)   // property detail modal
+  const [selected, setSelected]   = useState(null)
+  const [thumbs, setThumbs]       = useState({})  // propertyId -> thumbnail url
 
   const alreadyRequested = agreements.map(a => a.property_id)
   const inCart           = cart.map(c => c.property.id)
+
+  // Fetch thumbnails for all properties in ONE call
+  useEffect(() => {
+    if (!properties.length) return
+    const propIds = properties.map(p => p.id)
+    // Batch fetch all thumbnails at once
+    API.get('/photos/thumbnails', { params: { ids: propIds.join(',') } })
+      .then(res => {
+        if (res.data && typeof res.data === 'object') setThumbs(res.data)
+      })
+      .catch(() => {
+        // Silently fail — no thumbnails shown
+      })
+  }, [properties.length])
 
   const filtered = properties
     .filter(p => {
@@ -199,7 +215,10 @@ function BrowseProperties({ properties, agreements, addToCart, cart }) {
           return (
             <div key={p.id} className={styles.propCard}>
               <div className={styles.propCardHeader}>
-                <span className={styles.propIcon}>🏢</span>
+                {thumbs[p.id]
+                  ? <img src={thumbs[p.id]} alt={p.title} className={styles.propThumb} />
+                  : <span className={styles.propIcon}>🏢</span>
+                }
                 {requested && <span className={styles.availBadge} style={{ background: '#d1fae5', color: '#065f46' }}>✅ Requested</span>}
                 {!requested && carted && <span className={styles.availBadge} style={{ background: '#fef3c7', color: '#92400e' }}>🛒 In Cart</span>}
                 {!requested && !carted && <span className={styles.availBadge}>Available</span>}
