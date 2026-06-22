@@ -304,3 +304,52 @@
 .roleHint span { font-size: 1.4rem; }
 .roleHint strong { display: block; color: #1a202c; font-size: 0.85rem; }
 .roleHint p { color: #94a3b8; margin: 0; font-size: 0.78rem; }
+
+/* ── OTP INPUT ───────────────────────────────────────────── */
+.otpGrid {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: center;
+  margin: 1.5rem 0;
+}
+
+.otpBox {
+  width: 52px;
+  height: 60px;
+  text-align: center;
+  font-size: 1.6rem;
+  font-weight: 800;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  color: #1a202c;
+  background: #f8fafc;
+}
+.otpBox:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102,126,234,0.15);
+  background: white;
+}
+
+.resendRow {
+  text-align: center;
+  margin-top: 1rem;
+}
+
+.resendBtn {
+  background: none;
+  border: none;
+  color: #4f46e5;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+.resendBtn:hover { color: #3730a3; }
+
+.resendCooldown {
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
