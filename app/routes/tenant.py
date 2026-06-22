@@ -184,10 +184,8 @@ def tenant_leave_property(user_id: int = Depends(auth.get_current_user_id)):
             "status": "vacating_pending"
         }).eq("id", agreement_id).execute()
 
-        # Clear tenant's property_id (they've initiated leave)
-        supabase.table("tenants").update({
-            "property_id": None
-        }).eq("id", t["id"]).execute()
+        # NOTE: Do NOT clear property_id here — only clear it when owner confirms vacate
+        # This prevents the broken state if owner rejects the vacate request
 
         return {
             "message": "Leave request sent to owner. They will confirm and make the property available.",

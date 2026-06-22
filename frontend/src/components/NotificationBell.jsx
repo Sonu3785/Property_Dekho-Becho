@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import API from '../api/axios'
 import styles from './NotificationBell.module.css'
 
 export default function NotificationBell({ onNavigate }) {
   const [notifications, setNotifications] = useState([])
   const [open, setOpen] = useState(false)
-  const [loading, setLoading] = useState(false)
   const dropRef = useRef(null)
   const pollRef = useRef(null)
 
@@ -18,12 +17,10 @@ export default function NotificationBell({ onNavigate }) {
 
   useEffect(() => {
     fetchNotifications()
-    // Poll every 2 minutes — prevents Supabase rate limiting
     pollRef.current = setInterval(fetchNotifications, 120000)
     return () => clearInterval(pollRef.current)
   }, [])
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClick = (e) => {
       if (dropRef.current && !dropRef.current.contains(e.target)) setOpen(false)
@@ -35,11 +32,12 @@ export default function NotificationBell({ onNavigate }) {
   const unread = notifications.filter(n => !n.read).length
 
   const typeColor = {
-    request:  '#f59e0b',
-    accepted: '#10b981',
-    rejected: '#ef4444',
-    agreement:'#8b5cf6',
-    active:   '#10b981'
+    request:   '#f59e0b',
+    accepted:  '#10b981',
+    rejected:  '#ef4444',
+    agreement: '#8b5cf6',
+    active:    '#10b981',
+    vacating:  '#f97316',
   }
 
   const handleNotifClick = (notif) => {

@@ -140,23 +140,17 @@ def get_my_requests(user_id: int = Depends(auth.get_current_user_id)):
 @router.get("/incoming")
 def get_incoming_requests(owner_id: int = Depends(auth.get_current_user_id)):
     try:
-        print(f"INCOMING REQUESTS - owner_id from token: {owner_id}")
-
         props = supabase.table("properties").select("id").eq("owner_id", owner_id).execute()
-        print(f"Properties for owner {owner_id}: {props.data}")
         prop_ids = [p["id"] for p in props.data]
         if not prop_ids:
-            print(f"No properties found for owner_id={owner_id}")
             return []
 
-        # Get ALL requests for these properties (all statuses)
         all_requests = (
             supabase.table("rental_requests")
             .select("*")
             .in_("property_id", prop_ids)
             .execute()
         )
-        print(f"All requests found: {all_requests.data}")
 
         result = []
         for r in all_requests.data:
@@ -171,7 +165,6 @@ def get_incoming_requests(owner_id: int = Depends(auth.get_current_user_id)):
             result.append({**r, "tenant": t, "property": p})
         return result
     except Exception as e:
-        print("INCOMING REQUESTS ERROR:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -312,6 +305,9 @@ def confirm_vacate(
 
     # Terminate agreement
     supabase.table("agreements").update({"status": "terminated"}).eq("id", agreement_id).execute()
+
+    # Clear tenant's property_id now that leave is confirmed
+    supabase.table("tenants").update({"property_id": None}).eq("id", a["tenant_id"]).execute()
 
     # Unarchive the property
     supabase.table("properties").update({"status": "available"}).eq("id", a["property_id"]).execute()

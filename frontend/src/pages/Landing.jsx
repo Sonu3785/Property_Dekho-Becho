@@ -1,4 +1,3 @@
-import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import styles from './Landing.module.css'
 
@@ -44,14 +43,14 @@ export default function Landing() {
             <div className={styles.cardIcon}>🏢</div>
             <div>
               <div className={styles.cardTitle}>Properties Listed</div>
-              <div className={styles.cardValue}>1,240+</div>
+              <div className={styles.cardValue}>10+</div>
             </div>
           </div>
           <div className={styles.floatingCard2}>
             <div className={styles.cardIcon}>✅</div>
             <div>
               <div className={styles.cardTitle}>Active Agreements</div>
-              <div className={styles.cardValue}>860+</div>
+              <div className={styles.cardValue}>8+</div>
             </div>
           </div>
           <div className={styles.heroIllustration}>

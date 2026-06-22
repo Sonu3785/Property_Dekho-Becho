@@ -24,7 +24,6 @@ def register(user: schemas.UserCreate):
 
         new_user = response.data[0] if response.data else None
 
-        # Auto-create tenant record for tenant role
         if user.role == "tenant" and new_user:
             try:
                 existing_tenant = supabase.table("tenants").select("id").eq("email", user.email).execute()
@@ -38,15 +37,11 @@ def register(user: schemas.UserCreate):
             except Exception as te:
                 print("Auto-tenant insert warning:", str(te))
 
-        return {
-            "message": "Registered successfully",
-            "data":    new_user
-        }
+        return {"message": "Registered successfully", "data": new_user}
 
     except HTTPException:
         raise
     except Exception as e:
-        print("REGISTER ERROR:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -54,17 +49,14 @@ def register(user: schemas.UserCreate):
 def login(user: schemas.UserLogin):
     try:
         response = supabase.table("users").select("*").eq("email", user.email).execute()
-
         if not response.data:
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
         db_user = response.data[0]
-
         if not auth.verify_password(user.password, db_user["password"]):
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
         token = auth.create_access_token({"user_id": db_user["id"]})
-
         return {
             "access_token": token,
             "token_type":   "bearer",
@@ -76,11 +68,9 @@ def login(user: schemas.UserLogin):
                 "phone": db_user.get("phone") or ""
             }
         }
-
     except HTTPException:
         raise
     except Exception as e:
-        print("LOGIN ERROR:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -91,22 +81,3 @@ def get_me(user_id: int = Depends(auth.get_current_user_id)):
         raise HTTPException(status_code=404, detail="User not found")
     return response.data[0]
 
-
-@router.get("/show")
-def get_users():
-    return supabase.table("users").select("id,name,email,role").execute().data
-
-
-@router.get("/all-tenants")
-def get_all_tenants():
-    return supabase.table("tenants").select("*").execute().data
-
-
-@router.get("/all-properties")
-def get_all_properties_admin():
-    return supabase.table("properties").select("*").execute().data
-
-
-@router.get("/all-agreements")
-def get_all_agreements_admin():
-    return supabase.table("agreements").select("*").execute().data

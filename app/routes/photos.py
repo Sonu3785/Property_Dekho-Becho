@@ -4,7 +4,6 @@ from app.database import supabase
 from app import auth
 import uuid
 import os
-from typing import Optional
 
 router = APIRouter(prefix="/photos", tags=["Photos"])
 

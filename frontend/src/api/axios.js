@@ -1,6 +1,8 @@
 import axios from 'axios'
 
-const BASE_URL = 'https://property-dekho-becho.onrender.com'
+// Local dev: set VITE_API_URL=http://localhost:8000 in frontend/.env.local
+// Production: defaults to the Render backend
+const BASE_URL = import.meta.env.VITE_API_URL || 'https://property-dekho-becho.onrender.com'
 
 const API = axios.create({
   baseURL: BASE_URL,
@@ -18,9 +20,9 @@ API.interceptors.request.use((config) => {
   return config
 })
 
-// Pre-warm the backend as soon as this module loads.
-// Fires a silent ping to /health so the server is awake
-// by the time the user clicks Login or the dashboard fetches data.
-axios.get(`${BASE_URL}/health`).catch(() => {})
+// Pre-warm the backend on load (only for production)
+if (!import.meta.env.VITE_API_URL) {
+  axios.get(`${BASE_URL}/health`).catch(() => {})
+}
 
 export default API
