@@ -63,10 +63,12 @@ export default function TenantDashboard() {
 
     setLoadError(false)
     setRetryCount(0)
-    setProperties(p.status    === 'fulfilled' && Array.isArray(p.value.data)    ? p.value.data    : [])
-    setPayments(  pay.status  === 'fulfilled' && Array.isArray(pay.value.data)  ? pay.value.data  : [])
-    setAgreements(ag.status   === 'fulfilled' && Array.isArray(ag.value.data)   ? ag.value.data   : [])
-    setMyRequests(reqs.status === 'fulfilled' && Array.isArray(reqs.value.data) ? reqs.value.data : [])
+
+    if (p.status    === 'fulfilled' && Array.isArray(p.value.data))    setProperties(p.value.data)
+    if (pay.status  === 'fulfilled' && Array.isArray(pay.value.data))  setPayments(pay.value.data)
+    if (ag.status   === 'fulfilled' && Array.isArray(ag.value.data))   setAgreements(ag.value.data)
+    if (reqs.status === 'fulfilled' && Array.isArray(reqs.value.data)) setMyRequests(reqs.value.data)
+
     setLoading(false)
     setRefreshing(false)
   }

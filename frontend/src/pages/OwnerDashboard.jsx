@@ -42,18 +42,15 @@ export default function OwnerDashboard() {
       API.get('/requests/incoming'),
     ])
 
-    // Check if properties fetch failed (primary indicator of backend down)
     const propertiesOk = p.status === 'fulfilled' && Array.isArray(p.value.data)
 
     if (!propertiesOk && initial && attempt < 3) {
-      // Backend cold-starting — retry with backoff (5s, 10s, 15s)
       setRetryCount(attempt + 1)
       setTimeout(() => fetchAll(true, attempt + 1), (attempt + 1) * 5000)
       return
     }
 
     if (!propertiesOk && initial) {
-      // Gave up after retries
       setLoadError(true)
       setLoading(false)
       setRefreshing(false)
@@ -62,11 +59,18 @@ export default function OwnerDashboard() {
 
     setLoadError(false)
     setRetryCount(0)
-    setProperties(p.status   === 'fulfilled' && Array.isArray(p.value.data)   ? p.value.data   : [])
-    setTenants(   t.status   === 'fulfilled' && Array.isArray(t.value.data)   ? t.value.data   : [])
-    setPayments(  pay.status === 'fulfilled' && Array.isArray(pay.value.data) ? pay.value.data : [])
-    setAgreements(ag.status  === 'fulfilled' && Array.isArray(ag.value.data)  ? ag.value.data  : [])
-    setRequests(  req.status === 'fulfilled' && Array.isArray(req.value.data) ? req.value.data : [])
+
+    // Always update all data — don't skip on partial failures
+    if (p.status   === 'fulfilled' && Array.isArray(p.value.data))   setProperties(p.value.data)
+    if (t.status   === 'fulfilled' && Array.isArray(t.value.data))   setTenants(t.value.data)
+    if (pay.status === 'fulfilled' && Array.isArray(pay.value.data)) setPayments(pay.value.data)
+    if (ag.status  === 'fulfilled' && Array.isArray(ag.value.data))  setAgreements(ag.value.data)
+    if (req.status === 'fulfilled' && Array.isArray(req.value.data)) setRequests(req.value.data)
+
+    // Log any failures for debugging
+    if (ag.status  === 'rejected') console.warn('Agreements fetch failed:', ag.reason)
+    if (pay.status === 'rejected') console.warn('Payments fetch failed:', pay.reason)
+
     setLoading(false)
     setRefreshing(false)
   }
