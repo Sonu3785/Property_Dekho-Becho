@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import API from '../api/axios'
@@ -114,10 +114,10 @@ export default function Login() {
     }
   }
 
-  const handleResend = async () => {
+  const handleResend = async (purpose = 'login') => {
     if (resendCooldown > 0) return
     try {
-      await API.post('/users/resend-otp', { email: form.email, purpose: 'login' })
+      await API.post('/users/resend-otp', { email: form.email, purpose })
       toast.success('New OTP sent 📧')
       setOtp(['', '', '', '', '', ''])
       setResendCooldown(60)
@@ -148,7 +148,7 @@ export default function Login() {
         <div className={styles.rightPanel}>
           <div className={styles.formCard}>
             <div className={styles.formHeader}>
-              <h1>Enter OTP</h1>
+              <h1>{step === 'unverified' ? 'Verify Email' : 'Enter OTP'}</h1>
               <p>Sent to <strong>{form.email}</strong></p>
             </div>
 
@@ -180,7 +180,7 @@ export default function Login() {
             <div className={styles.resendRow}>
               {resendCooldown > 0
                 ? <span className={styles.resendCooldown}>Resend in {resendCooldown}s</span>
-                : <button className={styles.resendBtn} onClick={handleResend}>Resend OTP</button>
+                : <button className={styles.resendBtn} onClick={() => handleResend(purpose)}>Resend OTP</button>
               }
             </div>
 
