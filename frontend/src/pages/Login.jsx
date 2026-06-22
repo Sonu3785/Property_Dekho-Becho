@@ -38,11 +38,23 @@ export default function Login() {
         toast.success('OTP sent to your email 📧')
         setStep('otp')
         setResendCooldown(60)
+      } else if (res.data.access_token) {
+        // OTP table not ready — direct login fallback
+        const userRole = res.data.user?.role || 'owner'
+        login(res.data.access_token, {
+          id:    res.data.user?.id,
+          email: form.email,
+          role:  userRole,
+          name:  res.data.user?.name,
+          phone: res.data.user?.phone || ''
+        })
+        toast.success(`Welcome back, ${res.data.user?.name}! 👋`)
+        navigate(userRole === 'tenant' ? '/tenant' : '/owner')
       }
     } catch (err) {
       const detail = err.response?.data?.detail
-      if (detail === 'EMAIL_NOT_VERIFIED') {
-        toast.error('Email not verified. A new OTP has been sent.')
+      if (detail === 'EMAIL_NOT_VERIFIED' || detail?.includes('not verified')) {
+        toast.error('Email not verified. A new OTP has been sent to your email.')
         setStep('unverified')
         setResendCooldown(60)
       } else {

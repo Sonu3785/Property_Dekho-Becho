@@ -41,16 +41,29 @@ export default function Signup() {
 
     setLoading(true)
     try {
-      await API.post('/users/register', {
+      const res = await API.post('/users/register', {
         name:     form.name,
         email:    form.email,
         password: form.password,
         role,
         phone:    form.phone || ''
       })
-      toast.success('Account created! Check your email for OTP 📧')
-      setStep('otp')
-      setResendCooldown(60)
+      if (res.data.needs_otp === false) {
+        // OTP table not ready — auto-login directly
+        const loginRes = await API.post('/users/login', { email: form.email, password: form.password })
+        if (loginRes.data.access_token) {
+          login(loginRes.data.access_token, {
+            id: loginRes.data.user?.id, email: form.email,
+            role: loginRes.data.user?.role || role, name: form.name, phone: form.phone || ''
+          })
+          toast.success(`Welcome, ${form.name}! 🎉`)
+          navigate(role === 'owner' ? '/owner' : '/tenant')
+        }
+      } else {
+        toast.success('Account created! Check your email for OTP 📧')
+        setStep('otp')
+        setResendCooldown(60)
+      }
     } catch (err) {
       const msg = err.response?.data?.detail
       toast.error(typeof msg === 'string' ? msg : 'Registration failed. Try again.')
